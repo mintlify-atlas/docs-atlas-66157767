@@ -1,0 +1,376 @@
+---
+title: 'HSQLDB Setup and Configuration'
+description: 'Complete guide to setting up and using HSQLDB for the enterprise database application'
+---
+
+## Overview
+
+This guide demonstrates how to set up and configure HSQLDB (HyperSQL Database) as the database engine for the enterprise management system. HSQLDB is a lightweight, embedded SQL database written in Java that provides full JDBC support.
+
+## Prerequisites
+
+<Note>
+Ensure you have the following before starting:
+- Java Development Kit (JDK) 8 or higher
+- HSQLDB JDBC driver (hsqldb-2.7.2.jar)
+- Basic understanding of JDBC and SQL
+</Note>
+
+## Database Connection Setup
+
+<Steps>
+
+### Load the JDBC Driver
+
+First, load the HSQLDB JDBC driver class in your application:
+
+```java
+Class.forName("org.hsqldb.jdbc.JDBCDriver");
+```
+
+### Configure the Connection URL
+
+The application uses a configuration file (`config.ini`) to specify the database path:
+
+```java
+private static String URL;
+private static final String USER = "SA";
+private static final String PASSWORD = "";
+```
+
+### Load Configuration from File
+
+The `cargarConfiguracion()` method handles loading the database path:
+
+```java
+private static void cargarConfiguracion() throws IOException {
+    File configFile = new File("config.ini");
+    Properties properties = new Properties();
+    
+    if (!configFile.exists()) {
+        // Create default configuration
+        properties.setProperty("database.path", "./db_empresa");
+        properties.store(new FileOutputStream(configFile), "Configuración HSQLDB");
+        System.out.println("Archivo config.ini creado con ruta por defecto");
+    }
+    
+    properties.load(new FileInputStream(configFile));
+    String dbPath = properties.getProperty("database.path", "./db_empresa");
+    URL = "jdbc:hsqldb:file:" + dbPath + ";shutdown=true;hsqldb.lock_file=false";
+    
+    System.out.println("Conectando a: " + URL);
+}
+```
+
+<Tip>
+The connection string includes important parameters:
+- `shutdown=true` - Ensures the database shuts down cleanly when the last connection closes
+- `hsqldb.lock_file=false` - Disables lock file creation for easier portability
+</Tip>
+
+### Initialize the Database
+
+Check if the database schema exists and create it if needed:
+
+```java
+public static void inicializarBaseDatos() {
+    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
+        // Verify if tables already exist
+        DatabaseMetaData meta = conn.getMetaData();
+        ResultSet tables = meta.getTables(null, null, "T_CENTROS", null);
+        
+        if (!tables.next()) {
+            // Tables don't exist, create them
+            System.out.println("Creando base de datos...");
+            crearEsquemaCompleto(conn);
+        } else {
+            System.out.println("Base de datos ya existe.");
+        }
+    } catch (SQLException e) {
+        System.out.println("Error al inicializar BD: " + e.getMessage());
+    }
+}
+```
+
+</Steps>
+
+## Database Schema Creation
+
+The complete schema includes three tables with foreign key relationships:
+
+### Creating Tables
+
+```java
+public static void crearEsquemaCompleto(Connection conn) throws SQLException {
+    Statement stmt = conn.createStatement();
+    
+    // Drop existing tables
+    stmt.execute("DROP TABLE t_empleados IF EXISTS");
+    stmt.execute("DROP TABLE t_departamentos IF EXISTS");
+    stmt.execute("DROP TABLE t_centros IF EXISTS");
+    
+    // Create CENTROS table
+    stmt.execute("CREATE TABLE t_centros (" +
+                "codigo_centro INTEGER PRIMARY KEY, " +
+                "nombre_centro VARCHAR(21) NOT NULL, " +
+                "ubicacion VARCHAR(50) NOT NULL)");
+    
+    // Create DEPARTAMENTOS table
+    stmt.execute("CREATE TABLE t_departamentos (" +
+                "codigo_departamento INTEGER PRIMARY KEY, " +
+                "codigo_centro INTEGER NOT NULL, " +
+                "codigo_director INTEGER NOT NULL, " +
+                "tipo_director CHAR(1) NOT NULL, " +
+                "presupuesto_departamento DECIMAL(10,2) NOT NULL, " +
+                "codigo_departamento_superior INTEGER, " +
+                "nombre_departamento VARCHAR(50) NOT NULL, " +
+                "FOREIGN KEY (codigo_centro) REFERENCES t_centros(codigo_centro))");
+    
+    // Create EMPLEADOS table
+    stmt.execute("CREATE TABLE t_empleados (" +
+                "codigo_empleado INTEGER PRIMARY KEY, " +
+                "codigo_departamento INTEGER NOT NULL, " +
+                "extension_telefonica_empleado SMALLINT NOT NULL, " +
+                "fecha_nacimiento_empleado DATE NOT NULL, " +
+                "fecha_ingreso_empleado DATE NOT NULL, " +
+                "salario_base_empleado DECIMAL(10,2) NOT NULL, " +
+                "comision_empleado DECIMAL(10,2), " +
+                "numero_hijos_empleado SMALLINT NOT NULL, " +
+                "nombre_empleado VARCHAR(50) NOT NULL, " +
+                "FOREIGN KEY (codigo_departamento) REFERENCES t_departamentos(codigo_departamento))");
+    
+    System.out.println("Base de datos creada exitosamente!");
+    stmt.close();
+}
+```
+
+### Inserting Sample Data
+
+The application initializes the database with sample data:
+
+```java
+// Insert CENTROS
+stmt.execute("INSERT INTO t_centros VALUES (10, 'SEDE CENTRAL', 'C/ ALCALA, 820, MADRID')");
+stmt.execute("INSERT INTO t_centros VALUES (20, 'RELACION CON CLIENTES', 'C/ ATOCHA, 405, MADRID')");
+
+// Insert DEPARTAMENTOS
+stmt.execute("INSERT INTO t_departamentos VALUES (100, 10, 260, 'P', 120000, NULL, 'DIRECCION GENERAL')");
+stmt.execute("INSERT INTO t_departamentos VALUES (110, 20, 180, 'P', 15000, 100, 'DIRECCION COMERCIAL')");
+
+// Insert EMPLEADOS
+stmt.execute("INSERT INTO t_empleados VALUES (110, 121, 350, '1949-10-11', '1970-02-15', 3100, NULL, 3, 'PONS, CESAR')");
+stmt.execute("INSERT INTO t_empleados VALUES (120, 112, 840, '1955-06-09', '1988-10-01', 3500, 1100, 1, 'LASA, MARIO')");
+```
+
+## CRUD Operations
+
+### Query with JOIN
+
+<CodeGroup>
+
+```java View Employees
+private static void verEmpleados() {
+    String sql = "SELECT e.*, d.nombre_departamento FROM t_empleados e " +
+                 "JOIN t_departamentos d ON e.codigo_departamento = d.codigo_departamento";
+
+    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+         PreparedStatement ps = conn.prepareStatement(sql);
+         ResultSet rs = ps.executeQuery()) {
+
+        System.out.println("\n--- EMPLEADOS ---");
+        while (rs.next()) {
+            System.out.println("ID: " + rs.getInt("codigo_empleado") + 
+                             " | Nombre: " + rs.getString("nombre_empleado") +
+                             " | Depto: " + rs.getString("nombre_departamento") +
+                             " | Salario: " + rs.getDouble("salario_base_empleado"));
+        }
+    } catch (SQLException e) {
+        System.out.println("Error: " + e.getMessage());
+    }
+}
+```
+
+```java Insert Employee
+private static void agregarEmpleado() {
+    String sql = "INSERT INTO t_empleados (codigo_empleado, codigo_departamento, " +
+                "extension_telefonica_empleado, fecha_nacimiento_empleado, " +
+                "fecha_ingreso_empleado, salario_base_empleado, comision_empleado, " +
+                "numero_hijos_empleado, nombre_empleado) VALUES (?, ?, 100, '1990-01-01', ?, ?, 0, 0, ?)";
+
+    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+         PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+        pstmt.setInt(1, codigo);
+        pstmt.setInt(2, depto);
+        pstmt.setString(3, fecha);
+        pstmt.setDouble(4, salario);
+        pstmt.setString(5, nombre);
+
+        pstmt.executeUpdate();
+        System.out.println("Empleado agregado!");
+    } catch (SQLException e) {
+        System.out.println("Error: " + e.getMessage());
+    }
+}
+```
+
+```java Search with LIKE
+private static void buscarEmpleados() {
+    String sql = "SELECT * FROM t_empleados WHERE nombre_empleado LIKE ?";
+
+    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+         PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+        pstmt.setString(1, "%" + nombre + "%");
+        ResultSet rs = pstmt.executeQuery();
+
+        System.out.println("\n--- RESULTADOS ---");
+        while (rs.next()) {
+            System.out.println("ID: " + rs.getInt("codigo_empleado") + 
+                             " | Nombre: " + rs.getString("nombre_empleado"));
+        }
+    } catch (SQLException e) {
+        System.out.println("Error: " + e.getMessage());
+    }
+}
+```
+
+```java Delete Employee
+private static void eliminarEmpleado() {
+    String sql = "DELETE FROM t_empleados WHERE codigo_empleado = ?";
+    
+    try(Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+        PreparedStatement ps = conn.prepareStatement(sql)) {
+        
+        ps.setInt(1, codigo);
+        int filasAfectadas = ps.executeUpdate();
+        
+        if (filasAfectadas > 0) {
+            System.out.println("Empleado eliminado correctamente");
+        } else {
+            System.out.println("No se encontró el empleado con ese código");
+        }
+    } catch (Exception e) {
+        System.out.println("Error al eliminar: " + e.getMessage());
+    }
+}
+```
+
+</CodeGroup>
+
+### Complex JOIN Query
+
+Query across all three tables to get complete employee information:
+
+```java
+private static void informacionCompletaJoins() {
+    String sql = "SELECT " +
+                "e.codigo_empleado, " +
+                "e.nombre_empleado, " +
+                "e.salario_base_empleado, " +
+                "e.fecha_ingreso_empleado, " +
+                "d.nombre_departamento, " +
+                "d.presupuesto_departamento, " +
+                "c.nombre_centro, " +
+                "c.ubicacion " +
+                "FROM t_empleados e " +
+                "JOIN t_departamentos d ON e.codigo_departamento = d.codigo_departamento " +
+                "JOIN t_centros c ON d.codigo_centro = c.codigo_centro " +
+                "ORDER BY e.codigo_empleado";
+
+    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+         PreparedStatement ps = conn.prepareStatement(sql);
+         ResultSet rs = ps.executeQuery()) {
+
+        System.out.println("\n--- INFORMACIÓN COMPLETA EMPLEADOS (CON JOINS) ---");
+        while (rs.next()) {
+            System.out.println("ID Empleado: " + rs.getInt("codigo_empleado"));
+            System.out.println("Nombre: " + rs.getString("nombre_empleado"));
+            System.out.println("Departamento: " + rs.getString("nombre_departamento"));
+            System.out.println("Centro: " + rs.getString("nombre_centro"));
+            System.out.println("Ubicación: " + rs.getString("ubicacion"));
+        }
+    } catch (SQLException e) {
+        System.out.println("Error: " + e.getMessage());
+    }
+}
+```
+
+## Configuration File Format
+
+The `config.ini` file structure:
+
+```ini
+#Configuración HSQLDB
+database.path=./db_empresa
+```
+
+<Note>
+The database path can be:
+- Relative: `./db_empresa` (current directory)
+- Absolute: `/home/user/data/db_empresa`
+- The `.script`, `.properties`, and `.log` files will be created automatically
+</Note>
+
+## Running the Application
+
+<Steps>
+
+### Compile the Application
+
+```bash
+javac -cp hsqldb-2.7.2.jar DB_EnterpriseHSQLDB.java
+```
+
+### Run the Application
+
+```bash
+java -cp .:hsqldb-2.7.2.jar DB_EnterpriseHSQLDB
+```
+
+### First Run Output
+
+```
+Archivo config.ini creado con ruta por defecto
+Conectando a: jdbc:hsqldb:file:./db_empresa;shutdown=true;hsqldb.lock_file=false
+Creando base de datos...
+Base de datos creada exitosamente!
+
+=== GESTIÓN EMPRESA ===
+1. Ver empleados
+2. Agregar empleado
+3. Buscar empleados
+4. Ver departamentos
+5. Eliminar empleado
+6. Información completa con JOINs
+7. Salir
+```
+
+</Steps>
+
+## Database Files
+
+After initialization, HSQLDB creates several files:
+
+- `db_empresa.script` - Contains the schema and data in SQL format
+- `db_empresa.properties` - Database properties and settings
+- `db_empresa.log` - Transaction log for recovery
+- `config.ini` - Application configuration file
+
+<Tip>
+All these files should be included when backing up or moving the database to another location.
+</Tip>
+
+## Advantages of HSQLDB
+
+- **Lightweight**: Small footprint, perfect for embedded applications
+- **File-based**: No separate server process required
+- **Standards-compliant**: Full SQL support with JDBC
+- **Portable**: Database files can be easily copied between systems
+- **Zero configuration**: Works out of the box with minimal setup
+
+## Next Steps
+
+- Learn about [H2 Database Setup](/examples/h2-setup) as an alternative
+- See how to [create a JAR deployment](/examples/jar-deployment)
+- Review [CRUD Operations](/core-concepts/crud-operations) documentation

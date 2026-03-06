@@ -1,0 +1,367 @@
+---
+title: 'DB_EnterpriseHSQLDB'
+description: 'Complete HSQLDB database management system with CRUD operations'
+icon: 'server'
+---
+
+## Overview
+
+The `DB_EnterpriseHSQLDB` class is a complete enterprise database management system using HSQLDB. It provides a menu-driven interface for managing employees, departments, and centers with full CRUD (Create, Read, Update, Delete) operations.
+
+## Class Information
+
+<ParamField path="Class" type="public class">
+  **DB_EnterpriseHSQLDB**
+  
+  JDBC Driver: `org.hsqldb.jdbc.JDBCDriver`
+</ParamField>
+
+## Database Constants
+
+<ParamField path="URL" type="String" required>
+  Database connection URL (loaded from config.ini)
+  
+  ```java
+  private static String URL;
+  ```
+  
+  Default format: `jdbc:hsqldb:file:{database.path};shutdown=true;hsqldb.lock_file=false`
+</ParamField>
+
+<ParamField path="USER" type="String" default="SA">
+  Database username constant
+  
+  ```java
+  private static final String USER = "SA";
+  ```
+</ParamField>
+
+<ParamField path="PASSWORD" type="String" default="">
+  Database password (empty by default)
+  
+  ```java
+  private static final String PASSWORD = "";
+  ```
+</ParamField>
+
+## Main Method
+
+### Signature
+
+```java
+public static void main(String[] args)
+```
+
+### Workflow
+
+<CodeGroup>
+```java Driver Loading
+Class.forName("org.hsqldb.jdbc.JDBCDriver");
+```
+
+```java Configuration
+cargarConfiguracion();
+```
+
+```java Initialization
+inicializarBaseDatos();
+```
+
+```java Menu Launch
+menuPrincipal();
+```
+</CodeGroup>
+
+## Core Methods
+
+### cargarConfiguracion()
+
+```java
+private static void cargarConfiguracion() throws IOException
+```
+
+<ResponseField name="Purpose">
+  Loads or creates the database configuration file (`config.ini`)
+</ResponseField>
+
+<Accordion title="Configuration Details">
+  - Creates `config.ini` if it doesn't exist
+  - Default property: `database.path = ./db_empresa`
+  - Constructs JDBC URL with shutdown and lock file settings
+  
+  ```java
+  String dbPath = properties.getProperty("database.path", "./db_empresa");
+  URL = "jdbc:hsqldb:file:" + dbPath + ";shutdown=true;hsqldb.lock_file=false";
+  ```
+</Accordion>
+
+### inicializarBaseDatos()
+
+```java
+public static void inicializarBaseDatos()
+```
+
+<ResponseField name="Purpose">
+  Initializes the database by checking if tables exist and creating the schema if needed
+</ResponseField>
+
+<Accordion title="Implementation">
+  ```java
+  DatabaseMetaData meta = conn.getMetaData();
+  ResultSet tables = meta.getTables(null, null, "T_CENTROS", null);
+  
+  if (!tables.next()) {
+      System.out.println("Creando base de datos...");
+      crearEsquemaCompleto(conn);
+  } else {
+      System.out.println("Base de datos ya existe.");
+  }
+  ```
+</Accordion>
+
+### crearEsquemaCompleto()
+
+```java
+public static void crearEsquemaCompleto(Connection conn) throws SQLException
+```
+
+<ParamField path="conn" type="Connection" required>
+  Active database connection
+</ParamField>
+
+<ResponseField name="Tables Created">
+  - `t_centros` - Work centers/locations
+  - `t_departamentos` - Departments with foreign key to centers
+  - `t_empleados` - Employees with foreign key to departments
+</ResponseField>
+
+<Accordion title="Schema Structure">
+  <CodeGroup>
+  ```sql t_centros
+  CREATE TABLE t_centros (
+      codigo_centro INTEGER PRIMARY KEY,
+      nombre_centro VARCHAR(21) NOT NULL,
+      ubicacion VARCHAR(50) NOT NULL
+  )
+  ```
+  
+  ```sql t_departamentos
+  CREATE TABLE t_departamentos (
+      codigo_departamento INTEGER PRIMARY KEY,
+      codigo_centro INTEGER NOT NULL,
+      codigo_director INTEGER NOT NULL,
+      tipo_director CHAR(1) NOT NULL,
+      presupuesto_departamento DECIMAL(10,2) NOT NULL,
+      codigo_departamento_superior INTEGER,
+      nombre_departamento VARCHAR(50) NOT NULL,
+      FOREIGN KEY (codigo_centro) REFERENCES t_centros(codigo_centro)
+  )
+  ```
+  
+  ```sql t_empleados
+  CREATE TABLE t_empleados (
+      codigo_empleado INTEGER PRIMARY KEY,
+      codigo_departamento INTEGER NOT NULL,
+      extension_telefonica_empleado SMALLINT NOT NULL,
+      fecha_nacimiento_empleado DATE NOT NULL,
+      fecha_ingreso_empleado DATE NOT NULL,
+      salario_base_empleado DECIMAL(10,2) NOT NULL,
+      comision_empleado DECIMAL(10,2),
+      numero_hijos_empleado SMALLINT NOT NULL,
+      nombre_empleado VARCHAR(50) NOT NULL,
+      FOREIGN KEY (codigo_departamento) REFERENCES t_departamentos(codigo_departamento)
+  )
+  ```
+  </CodeGroup>
+</Accordion>
+
+### menuPrincipal()
+
+```java
+private static void menuPrincipal()
+```
+
+<ResponseField name="Menu Options">
+  1. Ver empleados
+  2. Agregar empleado
+  3. Buscar empleados
+  4. Ver departamentos
+  5. Eliminar empleado
+  6. Información completa con JOINs
+  7. Salir
+</ResponseField>
+
+## CRUD Operations
+
+### verEmpleados()
+
+```java
+private static void verEmpleados()
+```
+
+<Accordion title="SQL Query">
+  ```java
+  String sql = "SELECT e.*, d.nombre_departamento FROM t_empleados e " +
+               "JOIN t_departamentos d ON e.codigo_departamento = d.codigo_departamento";
+  ```
+  
+  Displays: Employee ID, Name, Department, Salary, and Hire Date
+</Accordion>
+
+### agregarEmpleado()
+
+```java
+private static void agregarEmpleado()
+```
+
+<ParamField path="User Input" type="Interactive">
+  - Código (Employee ID)
+  - Departamento (Department ID)
+  - Nombre (Name)
+  - Salario (Salary)
+  - Fecha ingreso (Hire Date in YYYY-MM-DD format)
+</ParamField>
+
+<Accordion title="Implementation">
+  ```java
+  String sql = "INSERT INTO t_empleados (codigo_empleado, codigo_departamento, " +
+              "extension_telefonica_empleado, fecha_nacimiento_empleado, " +
+              "fecha_ingreso_empleado, salario_base_empleado, comision_empleado, " +
+              "numero_hijos_empleado, nombre_empleado) VALUES (?, ?, 100, '1990-01-01', ?, ?, 0, 0, ?)";
+  
+  pstmt.setInt(1, codigo);
+  pstmt.setInt(2, depto);
+  pstmt.setString(3, fecha);
+  pstmt.setDouble(4, salario);
+  pstmt.setString(5, nombre);
+  pstmt.executeUpdate();
+  ```
+</Accordion>
+
+### buscarEmpleados()
+
+```java
+private static void buscarEmpleados()
+```
+
+<ParamField path="Search" type="String">
+  Partial name matching using LIKE operator
+</ParamField>
+
+<Accordion title="SQL Query">
+  ```java
+  String sql = "SELECT * FROM t_empleados WHERE nombre_empleado LIKE ?";
+  pstmt.setString(1, "%" + nombre + "%");
+  ```
+</Accordion>
+
+### verDepartamentos()
+
+```java
+private static void verDepartamentos()
+```
+
+<ResponseField name="Displays">
+  Department ID, Name, and Budget for all departments
+</ResponseField>
+
+### eliminarEmpleado()
+
+```java
+private static void eliminarEmpleado()
+```
+
+<ParamField path="codigo" type="int" required>
+  Employee code to delete
+</ParamField>
+
+<Accordion title="Implementation">
+  ```java
+  String sql = "DELETE FROM t_empleados WHERE codigo_empleado = ?";
+  ps.setInt(1, codigo);
+  int filasAfectadas = ps.executeUpdate();
+  
+  if (filasAfectadas > 0) {
+      System.out.println("Empleado eliminado correctamente");
+  } else {
+      System.out.println("No se encontró el empleado con ese código");
+  }
+  ```
+</Accordion>
+
+### informacionCompletaJoins()
+
+```java
+private static void informacionCompletaJoins()
+```
+
+<ResponseField name="Purpose">
+  Displays complete employee information with department and center data using JOINs
+</ResponseField>
+
+<Accordion title="Complex JOIN Query">
+  ```java
+  String sql = "SELECT " +
+              "e.codigo_empleado, " +
+              "e.nombre_empleado, " +
+              "e.salario_base_empleado, " +
+              "e.fecha_ingreso_empleado, " +
+              "d.nombre_departamento, " +
+              "d.presupuesto_departamento, " +
+              "c.nombre_centro, " +
+              "c.ubicacion " +
+              "FROM t_empleados e " +
+              "JOIN t_departamentos d ON e.codigo_departamento = d.codigo_departamento " +
+              "JOIN t_centros c ON d.codigo_centro = c.codigo_centro " +
+              "ORDER BY e.codigo_empleado";
+  ```
+  
+  Shows: Employee details, Department name and budget, Center name and location
+</Accordion>
+
+## Sample Data
+
+The schema includes initial data:
+
+<Accordion title="Centers">
+  - Code 10: SEDE CENTRAL (C/ ALCALA, 820, MADRID)
+  - Code 20: RELACION CON CLIENTES (C/ ATOCHA, 405, MADRID)
+</Accordion>
+
+<Accordion title="Departments">
+  - 100: DIRECCION GENERAL
+  - 110: DIRECCION COMERCIAL
+  - 111: SECTOR INDUSTRIAL
+  - 112: SECTOR SERVICIOS
+  - 120: ORGANIZACION
+  - 121: PERSONAL
+  - 122: PROCESO DE DATOS
+  - 130: FINANZAS
+</Accordion>
+
+<Accordion title="Employees">
+  Six employees with complete data including:
+  - PONS, CESAR (Code: 110)
+  - LASA, MARIO (Code: 120)
+  - TEROL, LUCIANO (Code: 130)
+  - PEREZ, JULIO (Code: 150)
+  - AGUIRRE, AUREO (Code: 160)
+  - PEREZ, MARCOS (Code: 180)
+</Accordion>
+
+## Error Handling
+
+```java
+catch (SQLException e) {
+    System.out.println("Error: " + e.getMessage());
+}
+catch (Exception e) {
+    System.out.println("Error: " + e.getMessage());
+    e.printStackTrace();
+}
+```
+
+## Related Classes
+
+- [DB_Enterprise](/api/db-enterprise) - Basic configuration manager
+- [DB_EnterpriseH2](/api/db-enterprise-h2) - H2 database implementation

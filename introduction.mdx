@@ -1,0 +1,150 @@
+---
+title: "Introduction"
+description: "Learn JDBC database operations with practical examples using HSQLDB and H2"
+---
+
+## Welcome to Database Access Tutorial
+
+This educational project demonstrates essential JDBC database operations through practical, real-world examples. You'll learn how to work with embedded databases, manage transactions, handle concurrency, and build complete CRUD applications in Java.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get up and running with your first database application in minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Set up your development environment with Java and database drivers
+  </Card>
+  <Card title="CRUD Operations" icon="database" href="/operations/crud-operations">
+    Master create, read, update, and delete operations
+  </Card>
+  <Card title="Examples" icon="code" href="/examples/hsqldb-setup">
+    Explore complete working examples with HSQLDB and H2
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Dual Database Support" icon="server">
+    Work with both HSQLDB and H2 embedded databases with identical schemas
+  </Card>
+  <Card title="Transaction Management" icon="shield-check">
+    Learn proper transaction handling with commit, rollback, and isolation levels
+  </Card>
+  <Card title="Concurrency Patterns" icon="arrows-spin">
+    Understand race conditions and atomic operations through counter examples
+  </Card>
+  <Card title="Enterprise Schema" icon="building">
+    Practice with a realistic employee management system including centers, departments, and employees
+  </Card>
+  <Card title="Configuration Management" icon="gear">
+    External configuration via properties files for flexible deployment
+  </Card>
+  <Card title="JAR Deployment" icon="box-archive">
+    Package applications as portable JAR files for easy distribution
+  </Card>
+</CardGroup>
+
+## What You'll Learn
+
+<AccordionGroup>
+  <Accordion title="JDBC Fundamentals">
+    - Establishing database connections with DriverManager
+    - Using PreparedStatement for parameterized queries
+    - ResultSet navigation and data retrieval
+    - Resource management with try-with-resources
+  </Accordion>
+
+  <Accordion title="Transaction Control">
+    - setAutoCommit() for manual transaction control
+    - commit() and rollback() operations
+    - FOR UPDATE row locking
+    - Isolation levels and deadlock prevention
+  </Accordion>
+
+  <Accordion title="Database Schema Design">
+    - Foreign key relationships
+    - Primary key constraints
+    - Data type selection (INTEGER, VARCHAR, DATE, DECIMAL)
+    - Referential integrity
+  </Accordion>
+
+  <Accordion title="Real-World Patterns">
+    - Connection pooling considerations
+    - Error handling and exception management
+    - Updatable ResultSets vs. SQL UPDATE statements
+    - Configuration externalization
+  </Accordion>
+</AccordionGroup>
+
+## Project Structure
+
+The project includes several focused examples:
+
+- **DB_Enterprise** - Configuration-driven database connection setup
+- **DB_EnterpriseHSQLDB** - Complete employee management system with HSQLDB
+- **DB_EnterpriseH2** - Complete employee management system with H2
+- **Counter Implementations** - Various approaches to thread-safe counter operations
+- **CrearJar** - Utility for packaging applications as executable JARs
+
+## Database Schema
+
+The enterprise management examples use a three-table schema:
+
+```
+t_centros (Centers)
+├── codigo_centro (PK)
+├── nombre_centro
+└── ubicacion
+
+t_departamentos (Departments)
+├── codigo_departamento (PK)
+├── codigo_centro (FK → t_centros)
+├── codigo_director
+├── tipo_director
+├── presupuesto_departamento
+├── codigo_departamento_superior
+└── nombre_departamento
+
+t_empleados (Employees)
+├── codigo_empleado (PK)
+├── codigo_departamento (FK → t_departamentos)
+├── extension_telefonica_empleado
+├── fecha_nacimiento_empleado
+├── fecha_ingreso_empleado
+├── salario_base_empleado
+├── comision_empleado
+├── numero_hijos_empleado
+└── nombre_empleado
+```
+
+## Getting Started
+
+<Steps>
+  <Step title="Install Java">
+    Ensure you have Java 8 or higher installed on your system
+  </Step>
+  
+  <Step title="Get the Code">
+    Clone the repository from GitHub
+  </Step>
+  
+  <Step title="Run an Example">
+    Compile and run DB_EnterpriseH2.java to see the employee management system in action
+  </Step>
+</Steps>
+
+<Note>
+This is an educational project designed for learning JDBC concepts. The examples prioritize clarity and demonstration of specific patterns over production-ready architecture.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Follow the Quickstart" icon="play" href="/quickstart">
+    Run your first example and explore the interactive menu
+  </Card>
+  <Card title="Explore Components" icon="puzzle-piece" href="/components/database-configuration">
+    Learn about configuration management and database connections
+  </Card>
+</CardGroup>

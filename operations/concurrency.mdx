@@ -1,0 +1,536 @@
+---
+title: 'Concurrency Control'
+description: 'Understand race conditions, atomic operations, and safe concurrent database access'
+icon: 'users'
+---
+
+## The Concurrency Challenge
+
+When multiple processes or threads access the same database simultaneously, race conditions can lead to data corruption, lost updates, and inconsistent results. This guide demonstrates common concurrency problems and their solutions.
+
+## Understanding Race Conditions
+
+### The Read-Modify-Write Problem
+
+Consider a simple counter that should increment 1000 times. Here's the **buggy** implementation:
+
+```java ContadorEnBD.java
+public static void main(String[] args) {
+    final String sqlConsulta = "SELECT cuenta FROM contadores WHERE nombre=?";
+    final String sqlActualización = "UPDATE contadores SET cuenta=? WHERE nombre=?";
+    final String claveContador = "contador1";
+
+    try {
+        Connection connection = DriverManager.getConnection(
+            "jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false", "SA", "");
+        
+        PreparedStatement consulta = connection.prepareStatement(sqlConsulta);
+        PreparedStatement actualización = connection.prepareStatement(sqlActualización);
+        int cuenta = 0;
+
+        consulta.setString(1, claveContador);
+        actualización.setString(2, claveContador);
+        
+        for (int i = 0; i < 1000; i++) {
+            // READ
+            ResultSet res = consulta.executeQuery();
+            if (res.next()) {
+                cuenta = res.getInt(1) + 1;
+                
+                // MODIFY (in memory)
+                // Write happens here - RACE CONDITION!
+                
+                // WRITE
+                actualización.setInt(1, cuenta);
+                actualización.executeUpdate();
+            } else {
+                System.out.println("Error: No se encontró el contador");
+                break;
+            }
+        }
+        System.out.println("Valor final: " + cuenta);
+
+    } catch (SQLException e) {
+        System.out.println("Error SQL: " + e.getMessage());
+        e.printStackTrace();
+    }
+}
+```
+
+### What Goes Wrong?
+
+<Steps>
+  <Step title="Process A Reads">
+    Process A reads counter value: 100
+  </Step>
+  
+  <Step title="Process B Reads (Before A Writes)">
+    Process B also reads counter value: 100
+  </Step>
+  
+  <Step title="Process A Writes">
+    Process A increments to 101 and writes it
+  </Step>
+  
+  <Step title="Process B Writes (Lost Update!)">
+    Process B also increments to 101 and writes it—overwriting A's update!
+  </Step>
+</Steps>
+
+<Warning>
+**Lost Update Problem**: When two processes run this code simultaneously, the final count may be significantly less than 2000 because updates overwrite each other.
+</Warning>
+
+## Solution 1: Atomic SQL Operations
+
+The simplest and most efficient solution is to perform the increment entirely in SQL:
+
+```java ContadorEnBDsoloUpdateSql.java
+public class ContadorEnBDsoloUpdateSql {
+    public static void main(String[] args) {
+        final String claveContador = "contador1";
+        // The SQL UPDATE is atomic at the database level
+        final String sqlActualización = "UPDATE contador SET cuenta=cuenta+1 WHERE nombre='" + claveContador + "';";
+    
+        try {
+            Class.forName("org.hsqldb.jdbc.JDBCDriver");  
+            Connection connection = DriverManager.getConnection(  
+                "jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false", "contadores", "987654321");  
+            PreparedStatement actualización = connection.prepareStatement(sqlActualización);
+            
+            for (int i=0; i<1000; i++) {
+                if (actualización.executeUpdate() != 1) break;
+            }
+            
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+<Info>
+**Why This Works**: The database guarantees that `UPDATE contador SET cuenta=cuenta+1` is atomic. The read, increment, and write all happen as one indivisible operation.
+</Info>
+
+### Advantages of Atomic SQL
+
+<CardGroup cols={2}>
+  <Card title="No Race Conditions" icon="shield-check">
+    The database handles locking internally.
+  </Card>
+  
+  <Card title="Best Performance" icon="gauge-high">
+    No explicit locks or transactions needed.
+  </Card>
+  
+  <Card title="Simple Code" icon="code">
+    Single SQL statement, easy to understand.
+  </Card>
+  
+  <Card title="Works at Scale" icon="arrows-up-to-line">
+    Handles any number of concurrent processes.
+  </Card>
+</CardGroup>
+
+## Solution 2: Transactions with Row Locking
+
+When you need to read the value before updating, use `FOR UPDATE` to lock the row:
+
+```java ContadorSqlTransaccional.java
+public class ContadorSqlTransaccional {
+    public static void main(String[] args) throws ClassNotFoundException {
+        // FOR UPDATE locks the row for reading
+        String sqlConsulta = "select nombre,cuenta from contadores where nombre='contador1' for update;";
+        String sqlActualización = "update contadores set cuenta=? where nombre='contador1';";
+        
+        Class.forName("org.hsqldb.jdbc.JDBCDriver");
+        
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false", "contadores", "987654321"))
+        {
+            PreparedStatement consulta = connection.prepareStatement(sqlConsulta);
+            PreparedStatement actualización = connection.prepareStatement(sqlActualización);
+            int cuenta = 0;
+            
+            for (int i=0; i<1000; i++) {
+                connection.setAutoCommit(false);
+                ResultSet res = consulta.executeQuery();
+                if (res.next()) {
+                    cuenta = res.getInt(2);
+                    cuenta++;
+                    actualización.setInt(1, cuenta);
+                    actualización.executeUpdate();
+                }
+                else break;
+                connection.commit();
+                connection.setAutoCommit(false);
+            } // for
+            System.out.println("Valor final: " + cuenta);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+### How FOR UPDATE Prevents Race Conditions
+
+<Accordion title="Process A Executes">
+  1. `setAutoCommit(false)` - Start transaction
+  2. `SELECT ... FOR UPDATE` - Lock row (Process B must wait)
+  3. Read value: 100
+  4. Increment: 101
+  5. UPDATE to 101
+  6. `commit()` - Release lock
+</Accordion>
+
+<Accordion title="Process B Waits">
+  1. `setAutoCommit(false)` - Start transaction
+  2. `SELECT ... FOR UPDATE` - **BLOCKS** waiting for Process A's lock
+  3. Lock acquired after A commits
+  4. Read value: 101 (A's update)
+  5. Increment: 102
+  6. UPDATE to 102
+  7. `commit()` - Release lock
+</Accordion>
+
+<Info>
+The key insight: `FOR UPDATE` creates an **exclusive lock**. Only one transaction at a time can hold the lock, forcing serial execution of the critical section.
+</Info>
+
+## Solution 3: Updatable ResultSets
+
+Combining updatable ResultSets with row locking:
+
+```java ContadorSqlTransaccionalResUpdateable.java
+String sqlConsulta = "select nombre,cuenta from contadores where nombre='contador1' for update;";
+
+Class.forName("org.hsqldb.jdbc.JDBCDriver");
+
+try (Connection connection = DriverManager.getConnection(
+        "jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false", "contadores", "987654321"))
+{
+    PreparedStatement consulta = connection.prepareStatement(
+        sqlConsulta,
+        ResultSet.FETCH_FORWARD,
+        ResultSet.CONCUR_UPDATABLE
+    );
+    int cuenta = 0;
+    
+    for (int i=0; i<1000; i++) {
+        connection.setAutoCommit(false);
+        ResultSet res = consulta.executeQuery();
+        if (res.next()) {
+            cuenta = res.getInt(2);
+            cuenta++;
+            // Update directly through ResultSet
+            res.updateInt(2, cuenta);
+            res.updateRow();
+        }
+        else break;
+        connection.commit();
+        connection.setAutoCommit(false);
+    }
+    System.out.println("Valor final: " + cuenta);
+}
+```
+
+<Warning>
+**Requirement**: This approach requires the row to have a primary key. As noted in the source: "Exije que nombre sea clave primaria !!!!"
+</Warning>
+
+## Solution 4: Application-Level Transactions
+
+The `ContadorBuggy` class shows proper transaction handling:
+
+```java ContadorBuggy.java
+public class ContadorBuggy {
+    public static void main(String[] args) {
+        String url = "jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false";
+        
+        try (Connection con = DriverManager.getConnection(url, "SA", "")) {
+            con.setAutoCommit(false);
+            
+            inicializarBD(con);
+            
+            String sqlActualiza = "update contadores set cuenta = cuenta + 1 where nombre='contador1'";
+            
+            try (PreparedStatement actualiza = con.prepareStatement(sqlActualiza)) {
+                for (int i = 0; i < 1000; i++) {
+                    actualiza.executeUpdate();
+                }
+                con.commit();
+                
+            } catch (SQLException e) {
+                con.rollback();
+                throw e;
+            }
+            
+            // Verificar resultado
+            try (Statement consulta = con.createStatement();
+                 ResultSet res = consulta.executeQuery("select cuenta from contadores where nombre='contador1'")) {
+                if (res.next()) {
+                    System.out.println("HSQLDB - Valor final: " + res.getInt(1));
+                }
+            }
+            
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+<Info>
+This wraps all 1000 updates in a single transaction. While it prevents partial failures, it doesn't prevent concurrent access issues unless combined with proper locking.
+</Info>
+
+## Comparing Solutions
+
+| Solution | Pros | Cons | Best For |
+|----------|------|------|----------|
+| **Atomic SQL** | Fastest, simplest, most reliable | Limited to operations SQL can express | Simple calculations, counters |
+| **FOR UPDATE** | Flexible, allows complex logic | Slower, explicit locking | Complex business logic requiring read-then-update |
+| **Updatable ResultSets** | Convenient for multiple columns | Requires primary keys, less portable | Updating multiple columns based on reads |
+| **Long Transactions** | Ensures consistency across multiple operations | Can cause blocking, deadlocks | Related operations that must succeed/fail together |
+
+## Concurrency Patterns
+
+### Pattern: Optimistic Locking
+
+```java
+// Add version column to track changes
+String sql = "UPDATE products SET price = ?, version = version + 1 " +
+             "WHERE id = ? AND version = ?";
+
+pstmt.setDouble(1, newPrice);
+pstmt.setInt(2, productId);
+pstmt.setInt(3, currentVersion);
+
+int rowsUpdated = pstmt.executeUpdate();
+if (rowsUpdated == 0) {
+    // Someone else updated it first - retry or fail
+    throw new ConcurrentModificationException();
+}
+```
+
+<Accordion title="When to Use Optimistic Locking">
+  **Good for:**
+  - High-read, low-write scenarios
+  - When conflicts are rare
+  - Web applications with long user think time
+  
+  **Avoid when:**
+  - High contention (frequent conflicts)
+  - Updates must never fail
+</Accordion>
+
+### Pattern: Pessimistic Locking
+
+```java
+connection.setAutoCommit(false);
+
+// Lock immediately
+String sql = "SELECT * FROM products WHERE id = ? FOR UPDATE";
+ResultSet rs = pstmt.executeQuery();
+
+// Now you have exclusive access
+if (rs.next()) {
+    // Do complex calculations
+    double newPrice = calculatePrice(rs.getDouble("price"));
+    
+    // Update
+    updateStmt.setDouble(1, newPrice);
+    updateStmt.executeUpdate();
+}
+
+connection.commit(); // Release lock
+```
+
+<Accordion title="When to Use Pessimistic Locking">
+  **Good for:**
+  - High contention scenarios
+  - Complex calculations between read and write
+  - When update failures are unacceptable
+  
+  **Avoid when:**
+  - Long processing time (blocks other users)
+  - Low contention (overhead not needed)
+</Accordion>
+
+## Testing Concurrent Code
+
+To test race conditions, run multiple instances simultaneously:
+
+```bash
+# Terminal 1
+java ContadorEnBD &
+
+# Terminal 2
+java ContadorEnBD &
+
+# Wait for both to complete
+wait
+
+# Check final count
+java -cp . VerifyCounter
+```
+
+<Info>
+If the implementations are correct, running two processes simultaneously should produce a final count of 2000. With the buggy version, you'll see counts less than 2000.
+</Info>
+
+## Common Concurrency Antipatterns
+
+<Warning>
+**Antipattern 1: Sleeping to "Fix" Race Conditions**
+
+```java
+ResultSet rs = stmt.executeQuery("SELECT count FROM table");
+Thread.sleep(100); // This doesn't help!
+int newCount = rs.getInt(1) + 1;
+stmt.executeUpdate("UPDATE table SET count = " + newCount);
+```
+
+This just makes the race condition window longer!
+</Warning>
+
+<Warning>
+**Antipattern 2: Application-Level Locks for Database Operations**
+
+```java
+synchronized (this) { // Wrong level of locking!
+    ResultSet rs = stmt.executeQuery("SELECT count FROM table");
+    int newCount = rs.getInt(1) + 1;
+    stmt.executeUpdate("UPDATE table SET count = " + newCount);
+}
+```
+
+Synchronized blocks only work within one JVM. Use database-level locking instead.
+</Warning>
+
+<Warning>
+**Antipattern 3: Retrying Without Backoff**
+
+```java
+while (true) {
+    try {
+        // Try update
+        if (optimisticUpdate()) break;
+    } catch (SQLException e) {
+        // Immediate retry can make contention worse!
+    }
+}
+```
+
+Add exponential backoff to reduce contention:
+
+```java
+int retries = 0;
+while (retries < MAX_RETRIES) {
+    try {
+        if (optimisticUpdate()) break;
+    } catch (SQLException e) {
+        Thread.sleep(100 * (1 << retries)); // Exponential backoff
+        retries++;
+    }
+}
+```
+</Warning>
+
+## Deadlock Prevention
+
+Deadlocks occur when two transactions wait for each other:
+
+<Steps>
+  <Step title="Transaction A locks Row 1">
+    Waiting to lock Row 2
+  </Step>
+  
+  <Step title="Transaction B locks Row 2">
+    Waiting to lock Row 1
+  </Step>
+  
+  <Step title="Deadlock!">
+    Both transactions are blocked forever.
+  </Step>
+</Steps>
+
+### Prevention Strategies
+
+<CardGroup cols={2}>
+  <Card title="Consistent Lock Order" icon="arrow-down-1-9">
+    Always acquire locks in the same order (e.g., by ID ascending).
+  </Card>
+  
+  <Card title="Short Transactions" icon="clock">
+    Minimize time between acquiring and releasing locks.
+  </Card>
+  
+  <Card title="Deadlock Detection" icon="triangle-exclamation">
+    Catch deadlock exceptions and retry with backoff.
+  </Card>
+  
+  <Card title="Lock Timeout" icon="hourglass-end">
+    Set timeouts to prevent infinite waiting.
+  </Card>
+</CardGroup>
+
+```java
+try {
+    connection.setAutoCommit(false);
+    // Acquire locks in consistent order
+    lockRow(Math.min(id1, id2));
+    lockRow(Math.max(id1, id2));
+    // Perform updates
+    connection.commit();
+} catch (SQLException e) {
+    if (isDeadlock(e)) {
+        connection.rollback();
+        // Retry with exponential backoff
+    }
+}
+```
+
+## Best Practices Summary
+
+<Steps>
+  <Step title="Prefer Atomic SQL">
+    Use `UPDATE table SET col = col + 1` whenever possible.
+  </Step>
+  
+  <Step title="Use FOR UPDATE Sparingly">
+    Only when you need to read before writing complex calculations.
+  </Step>
+  
+  <Step title="Keep Transactions Short">
+    Long transactions increase contention and deadlock risk.
+  </Step>
+  
+  <Step title="Test with Concurrent Load">
+    Always test with multiple simultaneous connections.
+  </Step>
+  
+  <Step title="Handle Deadlocks">
+    Implement retry logic with exponential backoff.
+  </Step>
+  
+  <Step title="Monitor Lock Wait Times">
+    Use database monitoring to identify contention hotspots.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CRUD Operations" icon="database" href="/operations/crud-operations">
+    Review fundamental database operations.
+  </Card>
+  
+  <Card title="Transactions" icon="arrows-spin" href="/operations/transactions">
+    Learn more about transaction management.
+  </Card>
+</CardGroup>

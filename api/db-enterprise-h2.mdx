@@ -1,0 +1,431 @@
+---
+title: 'DB_EnterpriseH2'
+description: 'Complete H2 database management system with CRUD operations'
+icon: 'database'
+---
+
+## Overview
+
+The `DB_EnterpriseH2` class is a complete enterprise database management system using H2 Database Engine. It provides the same functionality as DB_EnterpriseHSQLDB but optimized for H2, including automatic database file cleanup and file-based storage.
+
+## Class Information
+
+<ParamField path="Class" type="public class">
+  **DB_EnterpriseH2**
+  
+  JDBC Driver: `org.h2.Driver`
+</ParamField>
+
+## Database Constants
+
+<ParamField path="URL" type="String" default="jdbc:h2:file:./db_empresa_h2;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1">
+  H2 database connection URL with auto-server mode and persistent connection
+  
+  ```java
+  private static final String URL = "jdbc:h2:file:./db_empresa_h2;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1";
+  ```
+</ParamField>
+
+<ParamField path="AUTO_SERVER" type="boolean" default="TRUE">
+  Enables multiple concurrent connections to the same database
+</ParamField>
+
+<ParamField path="DB_CLOSE_DELAY" type="int" default="-1">
+  Keeps database open until JVM shutdown (-1 = never auto-close)
+</ParamField>
+
+<ParamField path="USER" type="String" default="SA">
+  Database username constant
+  
+  ```java
+  private static final String USER = "SA";
+  ```
+</ParamField>
+
+<ParamField path="PASSWORD" type="String" default="">
+  Database password (empty by default)
+  
+  ```java
+  private static final String PASSWORD = "";
+  ```
+</ParamField>
+
+## Main Method
+
+### Signature
+
+```java
+public static void main(String[] args)
+```
+
+### Workflow
+
+<CodeGroup>
+```java Driver Loading
+Class.forName("org.h2.Driver");
+```
+
+```java Cleanup
+eliminarArchivosBD();
+```
+
+```java Initialization
+inicializarBaseDatos();
+```
+
+```java Menu Launch
+menuPrincipal();
+```
+</CodeGroup>
+
+## Core Methods
+
+### eliminarArchivosBD()
+
+```java
+private static void eliminarArchivosBD()
+```
+
+<ResponseField name="Purpose">
+  Deletes existing H2 database files before creating a fresh database
+</ResponseField>
+
+<ParamField path="Files Removed">
+  - `db_empresa_h2.mv.db` - Main database file
+  - `db_empresa_h2.trace.db` - Trace/log file
+</ParamField>
+
+<Accordion title="Implementation">
+  ```java
+  File dbFile1 = new File("db_empresa_h2.mv.db");
+  File dbFile2 = new File("db_empresa_h2.trace.db");
+  
+  if (dbFile1.exists()) {
+      if (dbFile1.delete()) {
+          System.out.println("Archivo de BD anterior eliminado: " + dbFile1.getName());
+      } else {
+          System.out.println("No se pudo eliminar el archivo: " + dbFile1.getName());
+      }
+  }
+  
+  if (dbFile2.exists()) {
+      if (dbFile2.delete()) {
+          System.out.println("Archivo de trazas eliminado: " + dbFile2.getName());
+      }
+  }
+  ```
+</Accordion>
+
+### inicializarBaseDatos()
+
+```java
+private static void inicializarBaseDatos()
+```
+
+<ResponseField name="Purpose">
+  Checks if tables exist and creates the complete schema if needed
+</ResponseField>
+
+<Accordion title="Implementation">
+  ```java
+  DatabaseMetaData meta = conn.getMetaData();
+  ResultSet tables = meta.getTables(null, null, "T_EMPLEADOS", null);
+  
+  if (!tables.next()) {
+      crearEsquemaCompleto(conn);
+      System.out.println("Creando base de datos H2...");
+  } else {
+      System.out.println("Base de datos H2 ya existe.");
+  }
+  ```
+</Accordion>
+
+### crearEsquemaCompleto()
+
+```java
+private static void crearEsquemaCompleto(Connection conn) throws SQLException
+```
+
+<ParamField path="conn" type="Connection" required>
+  Active H2 database connection
+</ParamField>
+
+<ResponseField name="Tables Created">
+  - `t_centros` - Work centers/locations
+  - `t_departamentos` - Departments with foreign key to centers
+  - `t_empleados` - Employees with foreign key to departments
+</ResponseField>
+
+<Accordion title="Schema Structure">
+  <CodeGroup>
+  ```sql t_centros
+  CREATE TABLE t_centros (
+      codigo_centro INTEGER PRIMARY KEY,
+      nombre_centro VARCHAR(21) NOT NULL,
+      ubicacion VARCHAR(50) NOT NULL
+  )
+  ```
+  
+  ```sql t_departamentos
+  CREATE TABLE t_departamentos (
+      codigo_departamento INTEGER PRIMARY KEY,
+      codigo_centro INTEGER NOT NULL,
+      codigo_director INTEGER NOT NULL,
+      tipo_director CHAR(1) NOT NULL,
+      presupuesto_departamento DECIMAL(10,2) NOT NULL,
+      codigo_departamento_superior INTEGER,
+      nombre_departamento VARCHAR(50) NOT NULL,
+      FOREIGN KEY (codigo_centro) REFERENCES t_centros(codigo_centro)
+  )
+  ```
+  
+  ```sql t_empleados
+  CREATE TABLE t_empleados (
+      codigo_empleado INTEGER PRIMARY KEY,
+      codigo_departamento INTEGER NOT NULL,
+      extension_telefonica_empleado SMALLINT NOT NULL,
+      fecha_nacimiento_empleado DATE NOT NULL,
+      fecha_ingreso_empleado DATE NOT NULL,
+      salario_base_empleado DECIMAL(10,2) NOT NULL,
+      comision_empleado DECIMAL(10,2),
+      numero_hijos_empleado SMALLINT NOT NULL,
+      nombre_empleado VARCHAR(50) NOT NULL,
+      FOREIGN KEY (codigo_departamento) REFERENCES t_departamentos(codigo_departamento)
+  )
+  ```
+  </CodeGroup>
+</Accordion>
+
+### menuPrincipal()
+
+```java
+private static void menuPrincipal()
+```
+
+<ResponseField name="Menu Options">
+  1. Ver empleados
+  2. Agregar empleado
+  3. Buscar empleados
+  4. Ver departamentos
+  5. Eliminar empleado
+  6. Información completa con JOINs
+  7. Salir
+</ResponseField>
+
+## CRUD Operations
+
+### verEmpleados()
+
+```java
+private static void verEmpleados()
+```
+
+<Accordion title="SQL Query">
+  ```java
+  String sql = "SELECT e.*, d.nombre_departamento FROM t_empleados e " +
+              "JOIN t_departamentos d ON e.codigo_departamento = d.codigo_departamento";
+  ```
+  
+  Displays employee information with department names using JOIN
+</Accordion>
+
+### agregarEmpleado()
+
+```java
+private static void agregarEmpleado()
+```
+
+<ParamField path="User Input" type="Interactive">
+  - Código (Employee ID)
+  - Departamento (Department ID)
+  - Nombre (Employee Name)
+  - Salario (Base Salary)
+  - Fecha ingreso (Hire Date in YYYY-MM-DD format)
+</ParamField>
+
+<Accordion title="Parameterized Insert">
+  ```java
+  String sql = "INSERT INTO t_empleados (codigo_empleado, codigo_departamento, " +
+              "extension_telefonica_empleado, fecha_nacimiento_empleado, " +
+              "fecha_ingreso_empleado, salario_base_empleado, comision_empleado, " +
+              "numero_hijos_empleado, nombre_empleado) VALUES (?, ?, 100, '1990-01-01', ?, ?, 0, 0, ?)";
+  
+  pstmt.setInt(1, codigo);        // Employee code
+  pstmt.setInt(2, depto);         // Department code
+  pstmt.setString(3, fecha);      // Hire date
+  pstmt.setDouble(4, salario);    // Salary
+  pstmt.setString(5, nombre);     // Name
+  pstmt.executeUpdate();
+  ```
+</Accordion>
+
+### buscarEmpleados()
+
+```java
+private static void buscarEmpleados()
+```
+
+<ParamField path="nombre" type="String">
+  Partial name for LIKE search
+</ParamField>
+
+<Accordion title="Search Implementation">
+  ```java
+  String sql = "SELECT * FROM t_empleados WHERE nombre_empleado LIKE ?";
+  pstmt.setString(1, "%" + nombre + "%");
+  ResultSet rs = pstmt.executeQuery();
+  ```
+</Accordion>
+
+### verDepartamentos()
+
+```java
+private static void verDepartamentos()
+```
+
+<ResponseField name="Output">
+  Lists all departments with ID, name, and budget information
+</ResponseField>
+
+<Accordion title="Query">
+  ```java
+  String sql = "SELECT * FROM t_departamentos";
+  ```
+</Accordion>
+
+### eliminarEmpleado()
+
+```java
+private static void eliminarEmpleado()
+```
+
+<ParamField path="codigo" type="int" required>
+  Employee code to delete from the database
+</ParamField>
+
+<Accordion title="Delete Implementation">
+  ```java
+  String sql = "DELETE FROM t_empleados WHERE codigo_empleado = ?";
+  ps.setInt(1, codigo);
+  int filasAfectadas = ps.executeUpdate();
+  
+  if (filasAfectadas > 0) {
+      System.out.println("Empleado eliminado correctamente");
+  } else {
+      System.out.println("No se encontró el empleado con ese código");
+  }
+  ```
+</Accordion>
+
+### informacionCompletaJoins()
+
+```java
+private static void informacionCompletaJoins()
+```
+
+<ResponseField name="Purpose">
+  Displays comprehensive employee information by joining three tables
+</ResponseField>
+
+<Accordion title="Triple JOIN Query">
+  ```java
+  String sql = "SELECT " +
+              "e.codigo_empleado, " +
+              "e.nombre_empleado, " +
+              "e.salario_base_empleado, " +
+              "e.fecha_ingreso_empleado, " +
+              "d.nombre_departamento, " +
+              "d.presupuesto_departamento, " +
+              "c.nombre_centro, " +
+              "c.ubicacion " +
+              "FROM t_empleados e " +
+              "JOIN t_departamentos d ON e.codigo_departamento = d.codigo_departamento " +
+              "JOIN t_centros c ON d.codigo_centro = c.codigo_centro " +
+              "ORDER BY e.codigo_empleado";
+  ```
+  
+  <ResponseField name="Joins">
+    - Employee → Department (via codigo_departamento)
+    - Department → Center (via codigo_centro)
+  </ResponseField>
+</Accordion>
+
+## Sample Data
+
+The database is populated with initial data during creation:
+
+<Accordion title="Centers (t_centros)">
+  ```sql
+  INSERT INTO t_centros VALUES (10, 'SEDE CENTRAL', 'C/ ALCALA, 820, MADRID');
+  INSERT INTO t_centros VALUES (20, 'RELACION CON CLIENTES', 'C/ ATOCHA, 405, MADRID');
+  ```
+</Accordion>
+
+<Accordion title="Departments (t_departamentos)">
+  Eight departments including:
+  - 100: DIRECCION GENERAL (Budget: 120,000)
+  - 110: DIRECCION COMERCIAL (Budget: 15,000)
+  - 111: SECTOR INDUSTRIAL (Budget: 11,000)
+  - 112: SECTOR SERVICIOS (Budget: 9,000)
+  - 120: ORGANIZACION (Budget: 3,000)
+  - 121: PERSONAL (Budget: 2,000)
+  - 122: PROCESO DE DATOS (Budget: 6,000)
+  - 130: FINANZAS (Budget: 2,000)
+</Accordion>
+
+<Accordion title="Employees (t_empleados)">
+  Six employees with complete information:
+  - 110: PONS, CESAR (Salary: 3,100, Dept: 121 PERSONAL)
+  - 120: LASA, MARIO (Salary: 3,500, Dept: 112 SECTOR SERVICIOS)
+  - 130: TEROL, LUCIANO (Salary: 2,900, Dept: 112 SECTOR SERVICIOS)
+  - 150: PEREZ, JULIO (Salary: 4,400, Dept: 121 PERSONAL)
+  - 160: AGUIRRE, AUREO (Salary: 3,100, Dept: 111 SECTOR INDUSTRIAL)
+  - 180: PEREZ, MARCOS (Salary: 4,800, Dept: 110 DIRECCION COMERCIAL)
+</Accordion>
+
+## H2-Specific Features
+
+<ParamField path="File Storage" type="File">
+  Database stored in `db_empresa_h2.mv.db` file
+</ParamField>
+
+<ParamField path="AUTO_SERVER" type="boolean" default="TRUE">
+  Allows multiple JVMs to connect to the same database file simultaneously
+</ParamField>
+
+<ParamField path="DB_CLOSE_DELAY" type="int" default="-1">
+  Prevents automatic database closure when last connection closes
+</ParamField>
+
+## Error Handling
+
+<CodeGroup>
+```java SQL Exceptions
+catch (SQLException e) {
+    System.out.println("Error: " + e.getMessage());
+}
+```
+
+```java General Exceptions
+catch (Exception e) {
+    System.out.println("Error: " + e.getMessage());
+    e.printStackTrace();
+}
+```
+</CodeGroup>
+
+## Differences from HSQLDB Version
+
+| Feature | DB_EnterpriseH2 | DB_EnterpriseHSQLDB |
+|---------|----------------|---------------------|
+| **Driver** | org.h2.Driver | org.hsqldb.jdbc.JDBCDriver |
+| **URL Format** | jdbc:h2:file | jdbc:hsqldb:file |
+| **Auto Server** | AUTO_SERVER=TRUE | N/A |
+| **File Cleanup** | eliminarArchivosBD() | No cleanup |
+| **Config File** | Hardcoded URL | config.ini |
+| **Table Check** | T_EMPLEADOS | T_CENTROS |
+
+## Related Classes
+
+- [DB_Enterprise](/api/db-enterprise) - Basic configuration manager
+- [DB_EnterpriseHSQLDB](/api/db-enterprise-hsqldb) - HSQLDB implementation

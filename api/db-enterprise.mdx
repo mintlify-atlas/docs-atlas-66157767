@@ -1,0 +1,182 @@
+---
+title: 'DB_Enterprise'
+description: 'Basic database enterprise connection configuration manager'
+icon: 'database'
+---
+
+## Overview
+
+The `DB_Enterprise` class provides basic database connection configuration using an external `config.ini` file. It supports both HSQLDB and H2 database management systems and demonstrates how to load database configurations from a properties file.
+
+## Class Information
+
+<ParamField path="Class" type="public class">
+  **DB_Enterprise**
+  
+  Main configuration class for enterprise database connections.
+</ParamField>
+
+## Main Method
+
+### Signature
+
+```java
+public static void main(String[] args) throws IOException
+```
+
+<ParamField path="args" type="String[]">
+  Command-line arguments (not used in this implementation)
+</ParamField>
+
+<ResponseField name="throws" type="IOException">
+  Thrown when there are issues reading or writing the configuration file
+</ResponseField>
+
+## Configuration Constants
+
+The class uses a properties file (`config.ini`) to manage database configuration:
+
+<Accordion title="Configuration Properties">
+  <ParamField path="driverHSQLDB" type="String" default="hsqldb">
+    HSQLDB driver identifier
+  </ParamField>
+  
+  <ParamField path="driverH2" type="String" default="h2">
+    H2 driver identifier
+  </ParamField>
+  
+  <ParamField path="nameDB" type="String" default="SA">
+    Database username (default: SA)
+  </ParamField>
+</Accordion>
+
+## Database URLs
+
+Depending on the driver selected in the configuration, different JDBC URLs are constructed:
+
+### HSQLDB URL
+```java
+"jdbc:hsqldb:file:/home/alumno/Escritorio/BBDD/db_empresa;shutdown=true;hsqldb.lock_file=false"
+```
+
+<ParamField path="shutdown" type="boolean" default="true">
+  Enables clean shutdown of the database
+</ParamField>
+
+<ParamField path="hsqldb.lock_file" type="boolean" default="false">
+  Disables lock file creation for concurrent access
+</ParamField>
+
+### H2 URL
+```java
+"jdbc:h2:file:./db_empresa_h2;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1"
+```
+
+<ParamField path="AUTO_SERVER" type="boolean" default="TRUE">
+  Enables automatic server mode for concurrent connections
+</ParamField>
+
+<ParamField path="DB_CLOSE_DELAY" type="int" default="-1">
+  Keeps the database open until the JVM exits (-1 means never auto-close)
+</ParamField>
+
+## Connection Details
+
+<ResponseField name="username" type="String" default="SA">
+  Default database username
+</ResponseField>
+
+<ResponseField name="password" type="String" default="">
+  Empty password (no authentication)
+</ResponseField>
+
+## Implementation Flow
+
+<CodeGroup>
+```java Configuration File Creation
+// If config.ini doesn't exist, create it with defaults
+properties.setProperty("driverH2", "h2");
+properties.setProperty("driverHSQLDB", "hsqldb");
+properties.setProperty("nameDB", "SA");
+properties.store(new FileOutputStream("config.ini"), 
+                 "Configuracion de la base de datos");
+```
+
+```java Loading Configuration
+// Load existing configuration
+properties.load(new FileInputStream(f));
+driverHSQLDB = properties.getProperty("driverHSQLDB");
+driverH2 = properties.getProperty("driverH2");
+nameDB = properties.getProperty("nameDB");
+```
+
+```java Establishing Connection
+// Create connection based on selected driver
+Connection conn = DriverManager.getConnection(url, "SA", "");
+System.out.println("La conexion se realizo correctamente " + url);
+```
+</CodeGroup>
+
+## Usage Example
+
+```java
+public class DB_Enterprise {
+    public static void main(String[] args) throws IOException {
+        // Variables for configuration
+        String driverHSQLDB = "";
+        String driverH2 = "";
+        String nameDB = "";
+        String url = "";
+        
+        File f = new File("config.ini");
+        Properties properties = new Properties();
+        
+        // Check if config file exists
+        if (!f.exists()) {
+            // Create default configuration
+            properties.setProperty("driverH2", "h2");
+            properties.setProperty("driverHSQLDB", "hsqldb");
+            properties.setProperty("nameDB", "SA");
+            properties.store(new FileOutputStream("config.ini"), 
+                           "Configuracion de la base de datos");
+        } else {
+            // Load existing configuration
+            properties.load(new FileInputStream(f));
+            driverHSQLDB = properties.getProperty("driverHSQLDB");
+            driverH2 = properties.getProperty("driverH2");
+            nameDB = properties.getProperty("nameDB");
+        }
+        
+        // Determine URL based on driver
+        if (driverHSQLDB.equals("hsqldb")) {
+            url = "jdbc:hsqldb:file:/home/alumno/Escritorio/BBDD/db_empresa;shutdown=true;hsqldb.lock_file=false";
+        } else if (driverH2.equals("h2")) {
+            url = "jdbc:h2:file:./db_empresa_h2;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1";
+        }
+        
+        try {
+            Connection conn = DriverManager.getConnection(url, "SA", "");
+            System.out.println("La conexion se realizo correctamente " + url);
+        } catch(SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+## Error Handling
+
+<Accordion title="SQLException Handling">
+  The class catches `SQLException` during connection attempts and prints the stack trace for debugging.
+  
+  ```java
+  catch(SQLException e) {
+      e.printStackTrace();
+  }
+  ```
+</Accordion>
+
+## Related Classes
+
+- [DB_EnterpriseHSQLDB](/api/db-enterprise-hsqldb) - Full HSQLDB implementation with CRUD operations
+- [DB_EnterpriseH2](/api/db-enterprise-h2) - Full H2 implementation with CRUD operations

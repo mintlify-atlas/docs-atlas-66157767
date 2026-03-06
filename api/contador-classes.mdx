@@ -1,0 +1,527 @@
+---
+title: 'Contador Classes'
+description: 'Database counter implementations demonstrating concurrency and transaction handling'
+icon: 'code'
+---
+
+## Overview
+
+The Contador classes demonstrate different approaches to implementing database counters, focusing on concurrency control, atomic operations, and transaction management. These classes illustrate common pitfalls and best practices when working with concurrent database access.
+
+## ContadorEnBD
+
+### Class Information
+
+<ParamField path="Class" type="public class">
+  **ContadorEnBD**
+  
+  Basic database counter with initialization logic
+</ParamField>
+
+### Main Method
+
+```java
+public static void main(String[] args)
+```
+
+### Database Configuration
+
+<ParamField path="sqlConsulta" type="final String">
+  ```java
+  "SELECT cuenta FROM contadores WHERE nombre=?"
+  ```
+</ParamField>
+
+<ParamField path="sqlActualización" type="final String">
+  ```java
+  "UPDATE contadores SET cuenta=? WHERE nombre=?"
+  ```
+</ParamField>
+
+<ParamField path="claveContador" type="final String" default="contador1">
+  Counter identifier key
+</ParamField>
+
+<ParamField path="Connection URL" type="String">
+  ```java
+  "jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false"
+  ```
+</ParamField>
+
+<ParamField path="Credentials">
+  - Username: `SA`
+  - Password: (empty)
+</ParamField>
+
+### Key Methods
+
+#### inicializarBD()
+
+```java
+private static void inicializarBD(Connection connection) throws SQLException
+```
+
+<ResponseField name="Purpose">
+  Creates the counter table and initializes the counter if it doesn't exist
+</ResponseField>
+
+<Accordion title="Implementation">
+  ```java
+  try (Statement stmt = connection.createStatement()) {
+      // Create table if not exists
+      stmt.execute("CREATE TABLE IF NOT EXISTS contadores (nombre VARCHAR(50) PRIMARY KEY, cuenta INT)");
+      
+      // Check if counter exists, insert if not
+      ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM contadores WHERE nombre='contador1'");
+      if (rs.next() && rs.getInt(1) == 0) {
+          stmt.execute("INSERT INTO contadores VALUES ('contador1', 0)");
+          System.out.println("Contador inicializado a 0");
+      }
+  }
+  ```
+</Accordion>
+
+### Counter Logic
+
+<Accordion title="Increment Loop">
+  ```java
+  for (int i = 0; i < 1000; i++) {
+      ResultSet res = consulta.executeQuery();
+      if (res.next()) {
+          cuenta = res.getInt(1) + 1;
+          actualización.setInt(1, cuenta);
+          actualización.executeUpdate();
+      } else {
+          System.out.println("Error: No se encontró el contador");
+          break;
+      }
+  }
+  System.out.println("Valor final: " + cuenta);
+  ```
+  
+  <ResponseField name="Issue">
+    This approach has race condition problems in concurrent scenarios
+  </ResponseField>
+</Accordion>
+
+---
+
+## ContadorEnBDUpdatable
+
+### Class Information
+
+<ParamField path="Class" type="public class">
+  **ContadorEnBDUpdatable**
+  
+  Uses updatable ResultSet for counter modification
+</ParamField>
+
+### Main Method
+
+```java
+public static void main(String[] args)
+```
+
+### Configuration
+
+<ParamField path="claveContador" type="final String" default="contador1">
+  Counter key identifier
+</ParamField>
+
+<ParamField path="sqlConsulta" type="final String">
+  ```java
+  "SELECT nombre,cuenta FROM contadores WHERE nombre=?"
+  ```
+</ParamField>
+
+<ParamField path="Connection">
+  - URL: `jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false`
+  - User: `contadores`
+  - Password: `987654321`
+</ParamField>
+
+### ResultSet Configuration
+
+<ParamField path="ResultSet Type" type="int">
+  `ResultSet.TYPE_SCROLL_INSENSITIVE` - Scrollable but not sensitive to changes
+</ParamField>
+
+<ParamField path="Concurrency Mode" type="int">
+  `ResultSet.CONCUR_UPDATABLE` - Allows ResultSet updates
+</ParamField>
+
+<Accordion title="Updatable ResultSet Implementation">
+  ```java
+  PreparedStatement consulta = connection.prepareStatement(
+      sqlConsulta, 
+      ResultSet.TYPE_SCROLL_INSENSITIVE, 
+      ResultSet.CONCUR_UPDATABLE
+  );
+  consulta.setString(1, claveContador);
+  
+  for (int i=0; i<1000; i++) {
+      if (consulta.execute()) {
+          ResultSet res = consulta.getResultSet();
+          if (res.next()) {
+              cuenta = res.getInt(2) + 1;
+              res.updateInt(2, cuenta);
+              res.updateRow();
+          }
+      }
+  }
+  ```
+</Accordion>
+
+---
+
+## ContadorEnBDsoloUpdateSql
+
+### Class Information
+
+<ParamField path="Class" type="public class">
+  **ContadorEnBDsoloUpdateSql**
+  
+  Atomic counter update using SQL increment operation
+</ParamField>
+
+### Main Method
+
+```java
+public static void main(String[] args)
+```
+
+### Atomic SQL Update
+
+<ParamField path="sqlActualización" type="final String">
+  ```java
+  "UPDATE contador SET cuenta=cuenta+1 WHERE nombre='contador1';"
+  ```
+</ParamField>
+
+<ResponseField name="Atomicity" type="boolean" default="true">
+  This approach is atomic - the increment happens entirely within the database
+</ResponseField>
+
+<Accordion title="Atomic Update Implementation">
+  ```java
+  Class.forName("org.hsqldb.jdbc.JDBCDriver");
+  Connection connection = DriverManager.getConnection(
+      "jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false", 
+      "contadores", 
+      "987654321"
+  );
+  
+  PreparedStatement actualización = connection.prepareStatement(sqlActualización);
+  
+  for (int i=0; i<1000; i++) {
+      if (actualización.executeUpdate() != 1) break;
+  }
+  ```
+  
+  <ResponseField name="Advantage">
+    No race conditions - the database handles the read-modify-write as a single atomic operation
+  </ResponseField>
+</Accordion>
+
+---
+
+## ContadorSqlTransaccional
+
+### Class Information
+
+<ParamField path="Class" type="public class">
+  **ContadorSqlTransaccional**
+  
+  Transaction-based counter with row locking using FOR UPDATE
+</ParamField>
+
+### Main Method
+
+```java
+public static void main(String[] args) throws ClassNotFoundException
+```
+
+### SQL Queries
+
+<ParamField path="sqlConsulta" type="String">
+  ```java
+  "select nombre,cuenta from contadores where nombre='contador1' for update;"
+  ```
+  
+  The `FOR UPDATE` clause locks the row for the duration of the transaction
+</ParamField>
+
+<ParamField path="sqlActualización" type="String">
+  ```java
+  "update contadores set cuenta=? where nombre='contador1';"
+  ```
+</ParamField>
+
+### Transaction Management
+
+<Accordion title="Transactional Implementation">
+  ```java
+  Class.forName("org.hsqldb.jdbc.JDBCDriver");
+  
+  try (Connection connection = DriverManager.getConnection(
+          "jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false", 
+          "contadores", 
+          "987654321"))
+  {
+      PreparedStatement consulta = connection.prepareStatement(sqlConsulta);
+      PreparedStatement actualización = connection.prepareStatement(sqlActualización);
+      int cuenta = 0;
+      
+      for (int i=0; i<1000; i++) {
+          connection.setAutoCommit(false);  // Start transaction
+          
+          ResultSet res = consulta.executeQuery();  // Locks row with FOR UPDATE
+          if (res.next()) {
+              cuenta = res.getInt(2);
+              cuenta++;
+              actualización.setInt(1, cuenta);
+              actualización.executeUpdate();
+          } else {
+              break;
+          }
+          
+          connection.commit();              // Commit and release lock
+          connection.setAutoCommit(false);  // Prepare for next iteration
+      }
+      
+      System.out.println("Valor final: " + cuenta);
+  }
+  ```
+</Accordion>
+
+<ResponseField name="Concurrency Control">
+  - `FOR UPDATE` locks the row during the transaction
+  - Other processes must wait until commit/rollback
+  - Ensures atomicity of read-modify-write operation
+</ResponseField>
+
+---
+
+## ContadorSqlTransaccionalResUpdateable
+
+### Class Information
+
+<ParamField path="Class" type="public class">
+  **ContadorSqlTransaccionalResUpdateable**
+  
+  Combines transactions, row locking, and updatable ResultSet
+</ParamField>
+
+### Main Method
+
+```java
+public static void main(String[] args) throws ClassNotFoundException
+```
+
+### Configuration
+
+<ParamField path="sqlConsulta" type="String">
+  ```java
+  "select nombre,cuenta from contadores where nombre='contador1' for update;"
+  ```
+</ParamField>
+
+<ParamField path="ResultSet Mode">
+  - Type: `ResultSet.FETCH_FORWARD`
+  - Concurrency: `ResultSet.CONCUR_UPDATABLE`
+</ParamField>
+
+### Implementation
+
+<Accordion title="Transaction with Updatable ResultSet">
+  ```java
+  PreparedStatement consulta = connection.prepareStatement(
+      sqlConsulta,
+      ResultSet.FETCH_FORWARD,
+      ResultSet.CONCUR_UPDATABLE
+  );
+  
+  int cuenta = 0;
+  
+  for (int i=0; i<1000; i++) {
+      connection.setAutoCommit(false);
+      
+      ResultSet res = consulta.executeQuery();
+      if (res.next()) {
+          cuenta = res.getInt(2);
+          cuenta++;
+          // Requires nombre to be primary key!
+          res.updateInt(2, cuenta);
+          res.updateRow();
+      } else {
+          break;
+      }
+      
+      connection.commit();
+      connection.setAutoCommit(false);
+  }
+  
+  System.out.println("Valor final: " + cuenta);
+  ```
+</Accordion>
+
+<ResponseField name="Requirement">
+  The `nombre` column must be a PRIMARY KEY for updateRow() to work correctly
+</ResponseField>
+
+---
+
+## ContadorBuggy
+
+### Class Information
+
+<ParamField path="Class" type="public class">
+  **ContadorBuggy**
+  
+  Demonstrates a corrected approach using atomic updates within a single transaction
+</ParamField>
+
+### Main Method
+
+```java
+public static void main(String[] args)
+```
+
+### Configuration
+
+<ParamField path="url" type="String">
+  ```java
+  "jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false"
+  ```
+</ParamField>
+
+<ParamField path="Credentials">
+  - User: `SA`
+  - Password: (empty)
+</ParamField>
+
+### Methods
+
+#### inicializarBD()
+
+```java
+private static void inicializarBD(Connection con) throws SQLException
+```
+
+<Accordion title="Initialization Logic">
+  ```java
+  try (Statement stmt = con.createStatement()) {
+      stmt.execute("CREATE TABLE IF NOT EXISTS contadores (nombre VARCHAR(50) PRIMARY KEY, cuenta INT)");
+      
+      ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM contadores WHERE nombre='contador1'");
+      if (rs.next() && rs.getInt(1) == 0) {
+          stmt.execute("INSERT INTO contadores VALUES ('contador1', 0)");
+      }
+      con.commit();
+  }
+  ```
+</Accordion>
+
+### Implementation
+
+<Accordion title="Atomic Update with Transaction">
+  ```java
+  try (Connection con = DriverManager.getConnection(url, "SA", "")) {
+      con.setAutoCommit(false);
+      
+      inicializarBD(con);
+      
+      String sqlActualiza = "update contadores set cuenta = cuenta + 1 where nombre='contador1'";
+      
+      try (PreparedStatement actualiza = con.prepareStatement(sqlActualiza)) {
+          for (int i = 0; i < 1000; i++) {
+              actualiza.executeUpdate();
+          }
+          con.commit();
+      } catch (SQLException e) {
+          con.rollback();
+          throw e;
+      }
+      
+      // Verify result
+      try (Statement consulta = con.createStatement();
+           ResultSet res = consulta.executeQuery("select cuenta from contadores where nombre='contador1'")) {
+          if (res.next()) {
+              System.out.println("HSQLDB - Valor final: " + res.getInt(1));
+          }
+      }
+  }
+  ```
+</Accordion>
+
+<ResponseField name="Approach">
+  - Single transaction for all 1000 updates
+  - Atomic SQL increment (cuenta = cuenta + 1)
+  - Rollback on any SQLException
+  - Verification query at the end
+</ResponseField>
+
+---
+
+## Comparison Table
+
+| Class | Concurrency Safe | Uses Transactions | Row Locking | Approach |
+|-------|------------------|-------------------|-------------|----------|
+| **ContadorEnBD** | ❌ No | ❌ No | ❌ No | Separate SELECT and UPDATE |
+| **ContadorEnBDUpdatable** | ❌ No | ❌ No | ❌ No | Updatable ResultSet |
+| **ContadorEnBDsoloUpdateSql** | ✅ Yes | ❌ No | ❌ No | Atomic SQL increment |
+| **ContadorSqlTransaccional** | ✅ Yes | ✅ Yes | ✅ Yes (FOR UPDATE) | Transaction + row lock |
+| **ContadorSqlTransaccionalResUpdateable** | ✅ Yes | ✅ Yes | ✅ Yes (FOR UPDATE) | Transaction + updatable ResultSet |
+| **ContadorBuggy** | ✅ Yes | ✅ Yes | ❌ No | Single transaction + atomic SQL |
+
+## Best Practices Demonstrated
+
+<Accordion title="Race Condition Avoidance">
+  **Problem Classes:** ContadorEnBD, ContadorEnBDUpdatable
+  
+  These classes separate the read and write operations without proper locking, leading to race conditions in concurrent scenarios.
+  
+  **Solution Classes:** ContadorEnBDsoloUpdateSql, ContadorSqlTransaccional, ContadorBuggy
+  
+  Use atomic SQL operations or explicit row locking with transactions.
+</Accordion>
+
+<Accordion title="Transaction Management">
+  ```java
+  connection.setAutoCommit(false);  // Start transaction
+  try {
+      // Perform operations
+      connection.commit();
+  } catch (SQLException e) {
+      connection.rollback();
+      throw e;
+  }
+  ```
+</Accordion>
+
+<Accordion title="Row Locking with FOR UPDATE">
+  ```java
+  String sql = "SELECT * FROM table WHERE id=? FOR UPDATE";
+  ```
+  
+  Locks the selected rows until the transaction commits or rolls back, preventing concurrent modifications.
+</Accordion>
+
+<Accordion title="Atomic Operations">
+  ```java
+  // Atomic - happens entirely in database
+  "UPDATE contadores SET cuenta = cuenta + 1 WHERE nombre=?"
+  
+  // Not atomic - vulnerable to race conditions
+  int value = SELECT cuenta FROM contadores;
+  value++;
+  UPDATE contadores SET cuenta = value;
+  ```
+</Accordion>
+
+## Related Topics
+
+- JDBC Transaction Management
+- Database Concurrency Control
+- Optimistic vs Pessimistic Locking
+- ACID Properties

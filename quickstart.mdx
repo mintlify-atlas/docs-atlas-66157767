@@ -1,80 +1,229 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get started with the Database Access Tutorial in under 5 minutes"
 ---
 
-## Get started in three steps
+## Get up and running quickly
 
-Get your documentation site running locally and make your first customization.
+This quickstart guide will help you run the H2 database enterprise management system and perform your first database operations.
 
-### Step 1: Set up your local environment
+<Steps>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+### Download the H2 JDBC Driver
 
-### Step 2: Deploy your changes
+First, download the H2 database driver JAR file:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+```bash
+wget https://repo1.maven.org/maven2/com/h2database/h2/2.2.224/h2-2.2.224.jar
+```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+Or manually download from the [H2 Database website](https://h2database.com/).
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+### Compile the Application
 
-### Step 3: Go live
+Navigate to the source directory and compile the main application:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+```bash
+cd Acceso_Datos_Tarea2
+javac -cp ".:h2-2.2.224.jar" DB_EnterpriseH2.java
+```
 
-## Next steps
+<Note>
+  On Windows, use semicolon instead of colon: `-cp ".;h2-2.2.224.jar"`
+</Note>
 
-Now that you have your docs running, explore these key features:
+### Run the Application
+
+Execute the compiled program:
+
+```bash
+java -cp ".:h2-2.2.224.jar" DB_EnterpriseH2
+```
+
+You'll see the H2 database initialize with sample data:
+
+```
+Archivo de BD anterior eliminado: db_empresa_h2.mv.db
+Creando base de datos H2...
+Base de datos H2 en memoria creada exitosamente!
+
+=== GESTIÓN EMPRESA (H2) ===
+1. Ver empleados
+2. Agregar empleado
+3. Buscar empleados
+4. Ver departamentos
+5. Eliminar empleado
+6. Información completa con JOINs
+7. Salir
+Elige:
+```
+
+### Explore the Features
+
+Try out the menu options:
+
+<CodeGroup>
+
+```bash View all employees
+# Select option 1
+1
+
+# Output:
+--- EMPLEADOS ---
+ID: 110 | Nombre: PONS, CESAR | Depto: PERSONAL | Salario: 3100.0 | Ingreso: 1970-02-15
+ID: 120 | Nombre: LASA, MARIO | Depto: SECTOR SERVICIOS | Salario: 3500.0 | Ingreso: 1988-10-01
+...
+```
+
+```bash Add a new employee
+# Select option 2
+2
+
+# Follow the prompts:
+Código: 200
+Departamento: 121
+Nombre: GARCIA, ANA
+Salario: 3200
+Fecha ingreso (YYYY-MM-DD): 2024-01-15
+
+# Output:
+Empleado agregado!
+```
+
+```bash Search employees
+# Select option 3
+3
+
+# Enter search term:
+Buscar por nombre: PEREZ
+
+# Output:
+--- RESULTADOS ---
+ID: 150 | Nombre: PEREZ, JULIO | Salario: 4400.0 | Ingreso: 1968-01-15
+ID: 180 | Nombre: PEREZ, MARCOS | Salario: 4800.0 | Ingreso: 1976-03-18
+```
+
+</CodeGroup>
+
+</Steps>
+
+## Understanding the Application
+
+The application demonstrates key JDBC concepts:
 
 <CardGroup cols={2}>
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
+<Card title="Database Schema" icon="table">
+  Three interconnected tables: `t_centros` (centers), `t_departamentos` (departments), and `t_empleados` (employees)
 </Card>
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
+<Card title="CRUD Operations" icon="database">
+  Full Create, Read, Update, Delete functionality with PreparedStatements for security
 </Card>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
+<Card title="JOIN Queries" icon="link">
+  Complex queries combining employee, department, and center information
 </Card>
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
+<Card title="H2 File Database" icon="file">
+  Persistent file-based database that survives application restarts
 </Card>
 
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Key Code Snippets
+
+### Database Connection
+
+The application uses H2's file-based database with auto-server mode:
+
+```java DB_EnterpriseH2.java:7-9
+private static final String URL = "jdbc:h2:file:./db_empresa_h2;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1";
+private static final String USER = "SA";
+private static final String PASSWORD = "";
+```
+
+### PreparedStatement for Security
+
+All user inputs use PreparedStatements to prevent SQL injection:
+
+```java DB_EnterpriseH2.java:220-226
+String sql = "SELECT * FROM t_empleados WHERE nombre_empleado LIKE ?";
+
+try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+     PreparedStatement pstmt = conn.prepareStatement(sql)) {
+    
+    pstmt.setString(1, "%" + nombre + "%");
+    ResultSet rs = pstmt.executeQuery();
+```
+
+### Multi-table JOIN Query
+
+Retrieving complete employee information across three tables:
+
+```java DB_EnterpriseH2.java:260-272
+String sql = "SELECT " +
+            "e.codigo_empleado, " +
+            "e.nombre_empleado, " +
+            "e.salario_base_empleado, " +
+            "d.nombre_departamento, " +
+            "c.nombre_centro, " +
+            "c.ubicacion " +
+            "FROM t_empleados e " +
+            "JOIN t_departamentos d ON e.codigo_departamento = d.codigo_departamento " +
+            "JOIN t_centros c ON d.codigo_centro = c.codigo_centro " +
+            "ORDER BY e.codigo_empleado";
+```
+
+<Warning>
+  The application deletes and recreates the database file on each startup. This is intentional for the tutorial but not suitable for production use.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Installation Guide" icon="download" href="/installation">
+  Detailed setup instructions for Java and database drivers
+</Card>
+
+<Card title="Database Configuration" icon="gear" href="/components/database-configuration">
+  Learn about config.ini and connection settings
+</Card>
+
+<Card title="CRUD Operations" icon="code" href="/operations/crud-operations">
+  Deep dive into database operations
+</Card>
+
+<Card title="HSQLDB Setup" icon="server" href="/examples/hsqldb-setup">
+  Try the alternative HSQLDB implementation
+</Card>
+
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+
+<Accordion title="ClassNotFoundException: org.h2.Driver">
+  Make sure the H2 JAR file is in your classpath when compiling and running:
+  
+  ```bash
+  java -cp ".:h2-2.2.224.jar" DB_EnterpriseH2
+  ```
+</Accordion>
+
+<Accordion title="Database file locked">
+  If you see locking errors, ensure no other process is using the database. The `AUTO_SERVER=TRUE` parameter helps multiple connections, but the app recreates the DB on startup.
+</Accordion>
+
+<Accordion title="Compilation errors">
+  Ensure you're using Java 8 or higher:
+  
+  ```bash
+  java -version
+  javac -version
+  ```
+</Accordion>
+
+</AccordionGroup>

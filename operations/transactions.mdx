@@ -1,0 +1,400 @@
+---
+title: 'Transaction Management'
+description: 'Master ACID transactions, commit/rollback patterns, and row-level locking'
+icon: 'arrows-spin'
+---
+
+## What Are Transactions?
+
+A transaction is a sequence of database operations that are executed as a single unit of work. Transactions follow ACID properties:
+
+- **Atomicity**: All operations succeed or all fail
+- **Consistency**: Database moves from one valid state to another
+- **Isolation**: Concurrent transactions don't interfere
+- **Durability**: Committed changes are permanent
+
+## Basic Transaction Pattern
+
+<Steps>
+  <Step title="Disable Auto-Commit">
+    By default, JDBC auto-commits each statement. Disable this to control transactions manually.
+  </Step>
+  
+  <Step title="Execute Operations">
+    Perform multiple database operations.
+  </Step>
+  
+  <Step title="Commit or Rollback">
+    If all operations succeed, commit. If any fail, rollback.
+  </Step>
+  
+  <Step title="Restore Auto-Commit">
+    Re-enable auto-commit after transaction completes.
+  </Step>
+</Steps>
+
+### Simple Transaction Example
+
+```java ContadorBuggy.java
+try (Connection con = DriverManager.getConnection(url, "SA", "")) {
+    con.setAutoCommit(false);
+    
+    inicializarBD(con);
+    
+    String sqlActualiza = "update contadores set cuenta = cuenta + 1 where nombre='contador1'";
+    
+    try (PreparedStatement actualiza = con.prepareStatement(sqlActualiza)) {
+        for (int i = 0; i < 1000; i++) {
+            actualiza.executeUpdate();
+        }
+        con.commit();
+        
+    } catch (SQLException e) {
+        con.rollback();
+        throw e;
+    }
+    
+    // Verificar resultado
+    try (Statement consulta = con.createStatement();
+         ResultSet res = consulta.executeQuery("select cuenta from contadores where nombre='contador1'")) {
+        if (res.next()) {
+            System.out.println("HSQLDB - Valor final: " + res.getInt(1));
+        }
+    }
+    
+} catch (SQLException e) {
+    e.printStackTrace();
+}
+```
+
+<Info>
+This example commits all 1000 updates as a single transaction. If any update fails, all are rolled back, maintaining consistency.
+</Info>
+
+## Transaction Isolation and Row Locking
+
+### The Concurrency Problem
+
+Consider this "buggy" read-modify-write pattern:
+
+```java ContadorEnBD.java
+for (int i = 0; i < 1000; i++) {
+    // Read current value
+    ResultSet res = consulta.executeQuery();
+    if (res.next()) {
+        cuenta = res.getInt(1) + 1;
+        
+        // Write new value
+        actualización.setInt(1, cuenta);
+        actualización.executeUpdate();
+    }
+}
+```
+
+<Warning>
+**Race Condition Alert**: If two processes run this simultaneously, they can both read the same value (e.g., 100), increment it to 101, and write 101 back—losing one increment!
+</Warning>
+
+### Solution: FOR UPDATE with Transactions
+
+The `ContadorSqlTransaccional` class demonstrates the correct approach:
+
+```java ContadorSqlTransaccional.java
+public class ContadorSqlTransaccional {
+    public static void main(String[] args) throws ClassNotFoundException {
+        // FOR UPDATE locks the row for exclusive access
+        String sqlConsulta = "select nombre,cuenta from contadores where nombre='contador1' for update;";
+        String sqlActualización = "update contadores set cuenta=? where nombre='contador1';";
+        
+        Class.forName("org.hsqldb.jdbc.JDBCDriver");
+        
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false", "contadores", "987654321"))
+        {
+            PreparedStatement consulta = connection.prepareStatement(sqlConsulta);
+            PreparedStatement actualización = connection.prepareStatement(sqlActualización);
+            int cuenta = 0;
+            
+            for (int i=0; i<1000; i++) {
+                connection.setAutoCommit(false);
+                ResultSet res = consulta.executeQuery();
+                if (res.next()) {
+                    cuenta = res.getInt(2);
+                    cuenta++;
+                    actualización.setInt(1, cuenta);
+                    actualización.executeUpdate();
+                }
+                else break;
+                connection.commit();
+                connection.setAutoCommit(false);
+            } // for
+            System.out.println("Valor final: " + cuenta);
+        } catch (Exception e) {
+            e.printStackTrace();
+        } // try
+    } // main
+}
+```
+
+### How FOR UPDATE Works
+
+<Steps>
+  <Step title="Transaction Begins">
+    `setAutoCommit(false)` starts a transaction.
+  </Step>
+  
+  <Step title="Row Lock Acquired">
+    `SELECT ... FOR UPDATE` locks the selected row(s) exclusively. Other transactions must wait.
+  </Step>
+  
+  <Step title="Safe Modification">
+    With the row locked, you can safely read, modify, and update without interference.
+  </Step>
+  
+  <Step title="Lock Released">
+    `commit()` releases the lock, allowing other transactions to proceed.
+  </Step>
+</Steps>
+
+<Info>
+The combination of `FOR UPDATE` + transactions ensures:
+- **Row-level locking**: Only the specific row is locked, not the entire table
+- **Atomicity**: Read and write happen as one unit
+- **Exclusive access**: Other processes wait their turn
+</Info>
+
+## Updatable ResultSets with Transactions
+
+You can also use updatable ResultSets within transactions:
+
+```java ContadorSqlTransaccionalResUpdateable.java
+String sqlConsulta = "select nombre,cuenta from contadores where nombre='contador1' for update;";
+
+Class.forName("org.hsqldb.jdbc.JDBCDriver");
+
+try (Connection connection = DriverManager.getConnection(
+        "jdbc:hsqldb:file:./contadores_atomico;hsqldb.lock_file=false", "contadores", "987654321"))
+{
+    PreparedStatement consulta = connection.prepareStatement(
+        sqlConsulta,
+        ResultSet.FETCH_FORWARD,
+        ResultSet.CONCUR_UPDATABLE
+    );
+    int cuenta = 0;
+    
+    for (int i=0; i<1000; i++) {
+        connection.setAutoCommit(false);
+        ResultSet res = consulta.executeQuery();
+        if (res.next()) {
+            cuenta = res.getInt(2);
+            cuenta++;
+            // Update directly in ResultSet
+            res.updateInt(2, cuenta);
+            res.updateRow();
+        }
+        else break;
+        connection.commit();
+        connection.setAutoCommit(false);
+    }
+    System.out.println("Valor final: " + cuenta);
+}
+```
+
+<Warning>
+This approach requires that the table has a primary key. The comment in the source code notes: "Exije que nombre sea clave primaria !!!!"
+</Warning>
+
+## Transaction Patterns
+
+### Pattern 1: All-or-Nothing Transaction
+
+```java
+Connection conn = DriverManager.getConnection(url, user, pass);
+try {
+    conn.setAutoCommit(false);
+    
+    // Multiple related operations
+    statement1.executeUpdate();
+    statement2.executeUpdate();
+    statement3.executeUpdate();
+    
+    conn.commit();
+} catch (SQLException e) {
+    conn.rollback();
+    throw e;
+} finally {
+    conn.setAutoCommit(true);
+}
+```
+
+<Accordion title="Use Case: Bank Transfer">
+Transferring money between accounts:
+```java
+// Debit from account A
+pstmt1.setDouble(1, -100.00);
+pstmt1.setInt(2, accountA);
+pstmt1.executeUpdate();
+
+// Credit to account B
+pstmt2.setDouble(1, 100.00);
+pstmt2.setInt(2, accountB);
+pstmt2.executeUpdate();
+
+conn.commit(); // Both succeed or both fail
+```
+</Accordion>
+
+### Pattern 2: Micro-Transactions (One Per Operation)
+
+```java ContadorSqlTransaccional.java
+for (int i=0; i<1000; i++) {
+    connection.setAutoCommit(false);
+    
+    // Single operation with row lock
+    ResultSet res = consulta.executeQuery(); // FOR UPDATE
+    cuenta = res.getInt(2) + 1;
+    actualización.setInt(1, cuenta);
+    actualización.executeUpdate();
+    
+    connection.commit();
+    connection.setAutoCommit(false);
+}
+```
+
+<Info>
+This pattern releases locks quickly, allowing better concurrency. Each iteration is its own atomic transaction.
+</Info>
+
+### Pattern 3: Savepoints
+
+For partial rollbacks within a transaction:
+
+```java
+conn.setAutoCommit(false);
+
+try {
+    statement1.executeUpdate();
+    Savepoint savepoint1 = conn.setSavepoint("Savepoint1");
+    
+    statement2.executeUpdate();
+    
+    if (errorCondition) {
+        conn.rollback(savepoint1); // Rollback to savepoint
+    }
+    
+    statement3.executeUpdate();
+    conn.commit();
+} catch (SQLException e) {
+    conn.rollback(); // Rollback everything
+}
+```
+
+## Isolation Levels
+
+JDBC supports different transaction isolation levels:
+
+```java
+conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+```
+
+<CardGroup cols={2}>
+  <Card title="READ UNCOMMITTED" icon="eye">
+    Dirty reads possible. Fastest but least safe.
+  </Card>
+  
+  <Card title="READ COMMITTED" icon="eye-slash">
+    No dirty reads. Default for many databases.
+  </Card>
+  
+  <Card title="REPEATABLE READ" icon="lock">
+    Same query returns same results within transaction.
+  </Card>
+  
+  <Card title="SERIALIZABLE" icon="lock-keyhole">
+    Strictest isolation. Transactions execute as if serial.
+  </Card>
+</CardGroup>
+
+<Warning>
+Higher isolation levels provide more safety but reduce concurrency and performance. Choose based on your application's needs.
+</Warning>
+
+## Best Practices
+
+<Steps>
+  <Step title="Keep Transactions Short">
+    Hold locks for as little time as possible to maximize concurrency.
+  </Step>
+  
+  <Step title="Always Handle Rollback">
+    Wrap transaction code in try-catch and rollback on exceptions.
+  </Step>
+  
+  <Step title="Use FOR UPDATE Sparingly">
+    Only lock rows you're actually modifying to avoid blocking other transactions.
+  </Step>
+  
+  <Step title="Consider Deadlocks">
+    If multiple transactions lock resources in different orders, deadlocks can occur. Use consistent lock ordering.
+  </Step>
+  
+  <Step title="Test Concurrent Scenarios">
+    Always test your transaction code with multiple simultaneous connections.
+  </Step>
+</Steps>
+
+## Common Pitfalls
+
+<Accordion title="Forgetting to Commit">
+  Without `commit()`, changes remain in limbo and may be lost when the connection closes.
+  
+  ```java
+  conn.setAutoCommit(false);
+  pstmt.executeUpdate();
+  // FORGOT conn.commit()!
+  conn.close(); // Changes lost!
+  ```
+</Accordion>
+
+<Accordion title="Not Handling Rollback">
+  If an exception occurs mid-transaction without rollback, partial changes may persist.
+  
+  ```java
+  try {
+      conn.setAutoCommit(false);
+      stmt1.executeUpdate(); // Succeeds
+      stmt2.executeUpdate(); // Fails
+      conn.commit();
+  } catch (SQLException e) {
+      // MUST rollback here!
+      conn.rollback();
+  }
+  ```
+</Accordion>
+
+<Accordion title="Holding Transactions Too Long">
+  Long-running transactions block other users and increase deadlock risk:
+  
+  ```java
+  conn.setAutoCommit(false);
+  // Don't do this:
+  for (int i = 0; i < 1000000; i++) {
+      pstmt.executeUpdate();
+  }
+  conn.commit(); // Held lock for too long!
+  ```
+  
+  Better: Commit in batches or use individual transactions.
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CRUD Operations" icon="database" href="/operations/crud-operations">
+    Review basic database operations.
+  </Card>
+  
+  <Card title="Concurrency" icon="users" href="/operations/concurrency">
+    Deep dive into handling concurrent database access.
+  </Card>
+</CardGroup>

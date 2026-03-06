@@ -1,0 +1,451 @@
+---
+title: 'H2 Database Setup and Configuration'
+description: 'Complete guide to setting up and using H2 Database for the enterprise database application'
+---
+
+## Overview
+
+This guide demonstrates how to set up and configure H2 Database as an alternative database engine for the enterprise management system. H2 is a fast, open-source, embedded SQL database written in Java that provides excellent compatibility and performance.
+
+## Prerequisites
+
+<Note>
+Ensure you have the following before starting:
+- Java Development Kit (JDK) 8 or higher
+- H2 Database JDBC driver (h2-*.jar)
+- Basic understanding of JDBC and SQL
+</Note>
+
+## Database Connection Setup
+
+<Steps>
+
+### Load the JDBC Driver
+
+First, load the H2 JDBC driver class in your application:
+
+```java
+Class.forName("org.h2.Driver");
+```
+
+### Configure the Connection Parameters
+
+The application uses embedded file-based H2 database with specific connection parameters:
+
+```java
+private static final String URL = "jdbc:h2:file:./db_empresa_h2;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1";
+private static final String USER = "SA";
+private static final String PASSWORD = "";
+```
+
+<Tip>
+Key connection parameters:
+- `file:./db_empresa_h2` - Creates a file-based database in the current directory
+- `AUTO_SERVER=TRUE` - Allows multiple processes to access the database
+- `DB_CLOSE_DELAY=-1` - Keeps the database open as long as the JVM is running
+</Tip>
+
+### Initialize the Database
+
+The initialization process checks for existing tables and creates the schema if needed:
+
+```java
+private static void inicializarBaseDatos() {
+    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
+        // Verify if tables already exist
+        DatabaseMetaData meta = conn.getMetaData();
+        ResultSet tables = meta.getTables(null, null, "T_EMPLEADOS", null);
+        
+        if (!tables.next()) {
+            // Tables don't exist, create them
+            crearEsquemaCompleto(conn);
+            System.out.println("Creando base de datos H2...");
+        } else {
+            System.out.println("Base de datos H2 ya existe.");
+        }
+    } catch (SQLException e) {
+        System.out.println("Error al inicializar BD H2: " + e.getMessage());
+    }
+}
+```
+
+### Clean Previous Database Files (Optional)
+
+The application includes functionality to remove old database files:
+
+```java
+private static void eliminarArchivosBD() {
+    try {
+        File dbFile1 = new File("db_empresa_h2.mv.db");
+        File dbFile2 = new File("db_empresa_h2.trace.db");
+        
+        if (dbFile1.exists()) {
+            if (dbFile1.delete()) {
+                System.out.println("Archivo de BD anterior eliminado: " + dbFile1.getName());
+            } else {
+                System.out.println("No se pudo eliminar el archivo: " + dbFile1.getName());
+            }
+        }
+        
+        if (dbFile2.exists()) {
+            if (dbFile2.delete()) {
+                System.out.println("Archivo de trazas eliminado: " + dbFile2.getName());
+            }
+        }
+    } catch (Exception e) {
+        System.out.println("Advertencia: No se pudieron eliminar archivos de BD: " + e.getMessage());
+    }
+}
+```
+
+</Steps>
+
+## Database Schema Creation
+
+The complete schema includes three interrelated tables:
+
+### Creating Tables
+
+```java
+private static void crearEsquemaCompleto(Connection conn) throws SQLException {
+    Statement stmt = conn.createStatement();
+    
+    // Create CENTROS table
+    stmt.execute("CREATE TABLE t_centros (" +
+                "codigo_centro INTEGER PRIMARY KEY, " +
+                "nombre_centro VARCHAR(21) NOT NULL, " +
+                "ubicacion VARCHAR(50) NOT NULL)");
+    
+    // Create DEPARTAMENTOS table
+    stmt.execute("CREATE TABLE t_departamentos (" +
+                "codigo_departamento INTEGER PRIMARY KEY, " +
+                "codigo_centro INTEGER NOT NULL, " +
+                "codigo_director INTEGER NOT NULL, " +
+                "tipo_director CHAR(1) NOT NULL, " +
+                "presupuesto_departamento DECIMAL(10,2) NOT NULL, " +
+                "codigo_departamento_superior INTEGER, " +
+                "nombre_departamento VARCHAR(50) NOT NULL, " +
+                "FOREIGN KEY (codigo_centro) REFERENCES t_centros(codigo_centro))");
+    
+    // Create EMPLEADOS table
+    stmt.execute("CREATE TABLE t_empleados (" +
+                "codigo_empleado INTEGER PRIMARY KEY, " +
+                "codigo_departamento INTEGER NOT NULL, " +
+                "extension_telefonica_empleado SMALLINT NOT NULL, " +
+                "fecha_nacimiento_empleado DATE NOT NULL, " +
+                "fecha_ingreso_empleado DATE NOT NULL, " +
+                "salario_base_empleado DECIMAL(10,2) NOT NULL, " +
+                "comision_empleado DECIMAL(10,2), " +
+                "numero_hijos_empleado SMALLINT NOT NULL, " +
+                "nombre_empleado VARCHAR(50) NOT NULL, " +
+                "FOREIGN KEY (codigo_departamento) REFERENCES t_departamentos(codigo_departamento))");
+    
+    System.out.println("Base de datos H2 en memoria creada exitosamente!");
+    stmt.close();
+}
+```
+
+### Populating Initial Data
+
+Insert sample data for all three tables:
+
+```java
+// Insert CENTROS
+stmt.execute("INSERT INTO t_centros VALUES (10, 'SEDE CENTRAL', 'C/ ALCALA, 820, MADRID')");
+stmt.execute("INSERT INTO t_centros VALUES (20, 'RELACION CON CLIENTES', 'C/ ATOCHA, 405, MADRID')");
+
+// Insert DEPARTAMENTOS
+stmt.execute("INSERT INTO t_departamentos VALUES (100, 10, 260, 'P', 120000, NULL, 'DIRECCION GENERAL')");
+stmt.execute("INSERT INTO t_departamentos VALUES (110, 20, 180, 'P', 15000, 100, 'DIRECCION COMERCIAL')");
+stmt.execute("INSERT INTO t_departamentos VALUES (111, 20, 180, 'F', 11000, 110, 'SECTOR INDUSTRIAL')");
+stmt.execute("INSERT INTO t_departamentos VALUES (112, 20, 270, 'P', 9000, 110, 'SECTOR SERVICIOS')");
+stmt.execute("INSERT INTO t_departamentos VALUES (120, 10, 150, 'F', 3000, 100, 'ORGANIZACION')");
+stmt.execute("INSERT INTO t_departamentos VALUES (121, 10, 150, 'P', 2000, 120, 'PERSONAL')");
+stmt.execute("INSERT INTO t_departamentos VALUES (122, 10, 350, 'P', 6000, 120, 'PROCESO DE DATOS')");
+stmt.execute("INSERT INTO t_departamentos VALUES (130, 10, 310, 'P', 2000, 100, 'FINANZAS')");
+
+// Insert EMPLEADOS
+stmt.execute("INSERT INTO t_empleados VALUES (110, 121, 350, '1949-10-11', '1970-02-15', 3100, NULL, 3, 'PONS, CESAR')");
+stmt.execute("INSERT INTO t_empleados VALUES (120, 112, 840, '1955-06-09', '1988-10-01', 3500, 1100, 1, 'LASA, MARIO')");
+stmt.execute("INSERT INTO t_empleados VALUES (130, 112, 810, '1965-09-09', '1989-02-01', 2900, 1100, 2, 'TEROL, LUCIANO')");
+stmt.execute("INSERT INTO t_empleados VALUES (150, 121, 340, '1950-08-10', '1968-01-15', 4400, NULL, 0, 'PEREZ, JULIO')");
+stmt.execute("INSERT INTO t_empleados VALUES (160, 111, 740, '1959-07-09', '1988-11-11', 3100, 1100, 2, 'AGUIRRE, AUREO')");
+stmt.execute("INSERT INTO t_empleados VALUES (180, 110, 508, '1954-10-18', '1976-03-18', 4800, 500, 2, 'PEREZ, MARCOS')");
+```
+
+## CRUD Operations with H2
+
+### Querying Data
+
+<CodeGroup>
+
+```java View All Employees
+private static void verEmpleados() {
+    String sql = "SELECT e.*, d.nombre_departamento FROM t_empleados e " +
+                "JOIN t_departamentos d ON e.codigo_departamento = d.codigo_departamento";
+
+    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+         PreparedStatement ps = conn.prepareStatement(sql);
+         ResultSet rs = ps.executeQuery()) {
+
+        System.out.println("\n--- EMPLEADOS ---");
+        while (rs.next()) {
+            System.out.println("ID: " + rs.getInt("codigo_empleado") + 
+                             " | Nombre: " + rs.getString("nombre_empleado") +
+                             " | Depto: " + rs.getString("nombre_departamento") +
+                             " | Salario: " + rs.getDouble("salario_base_empleado") +
+                             " | Ingreso: " + rs.getDate("fecha_ingreso_empleado"));
+        }
+    } catch (SQLException e) {
+        System.out.println("Error: " + e.getMessage());
+    }
+}
+```
+
+```java View Departments
+private static void verDepartamentos() {
+    String sql = "SELECT * FROM t_departamentos";
+
+    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+         PreparedStatement ps = conn.prepareStatement(sql);
+         ResultSet rs = ps.executeQuery()) {
+
+        System.out.println("\n--- DEPARTAMENTOS ---");
+        while (rs.next()) {
+            System.out.println("ID: " + rs.getInt("codigo_departamento") + 
+                             " | Nombre: " + rs.getString("nombre_departamento") +
+                             " | Presupuesto: " + rs.getDouble("presupuesto_departamento"));
+        }
+    } catch (SQLException e) {
+        System.out.println("Error: " + e.getMessage());
+    }
+}
+```
+
+</CodeGroup>
+
+### Inserting Data
+
+```java
+private static void agregarEmpleado() {
+    try {
+        System.out.println("\n--- NUEVO EMPLEADO ---");
+        System.out.print("Código: ");
+        int codigo = scanner.nextInt();
+        System.out.print("Departamento: ");
+        int depto = scanner.nextInt();
+        scanner.nextLine();
+        System.out.print("Nombre: ");
+        String nombre = scanner.nextLine();
+        System.out.print("Salario: ");
+        double salario = scanner.nextDouble();
+        scanner.nextLine();
+        System.out.print("Fecha ingreso (YYYY-MM-DD): ");
+        String fecha = scanner.nextLine();
+
+        String sql = "INSERT INTO t_empleados (codigo_empleado, codigo_departamento, " +
+                    "extension_telefonica_empleado, fecha_nacimiento_empleado, " +
+                    "fecha_ingreso_empleado, salario_base_empleado, comision_empleado, " +
+                    "numero_hijos_empleado, nombre_empleado) VALUES (?, ?, 100, '1990-01-01', ?, ?, 0, 0, ?)";
+
+        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, codigo);
+            pstmt.setInt(2, depto);
+            pstmt.setString(3, fecha);
+            pstmt.setDouble(4, salario);
+            pstmt.setString(5, nombre);
+
+            pstmt.executeUpdate();
+            System.out.println("Empleado agregado!");
+        }
+    } catch (SQLException e) {
+        System.out.println("Error: " + e.getMessage());
+    }
+}
+```
+
+### Searching with Pattern Matching
+
+```java
+private static void buscarEmpleados() {
+    System.out.print("\nBuscar por nombre: ");
+    String nombre = scanner.nextLine();
+
+    String sql = "SELECT * FROM t_empleados WHERE nombre_empleado LIKE ?";
+
+    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+         PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+        pstmt.setString(1, "%" + nombre + "%");
+        ResultSet rs = pstmt.executeQuery();
+
+        System.out.println("\n--- RESULTADOS ---");
+        while (rs.next()) {
+            System.out.println("ID: " + rs.getInt("codigo_empleado") + 
+                             " | Nombre: " + rs.getString("nombre_empleado") +
+                             " | Salario: " + rs.getDouble("salario_base_empleado") +
+                             " | Ingreso: " + rs.getDate("fecha_ingreso_empleado"));
+        }
+    } catch (SQLException e) {
+        System.out.println("Error: " + e.getMessage());
+    }
+}
+```
+
+### Deleting Records
+
+```java
+private static void eliminarEmpleado() {
+    try {
+        System.out.println("Ingresa el código del empleado que quieras eliminar: ");
+        int codigo = scanner.nextInt();
+        
+        String sql = "DELETE FROM t_empleados WHERE codigo_empleado = ?";
+        
+        try(Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+            PreparedStatement ps = conn.prepareStatement(sql)) {
+            
+            ps.setInt(1, codigo);
+            int filasAfectadas = ps.executeUpdate();
+            
+            if (filasAfectadas > 0) {
+                System.out.println("Empleado eliminado correctamente");
+            } else {
+                System.out.println("No se encontró el empleado con ese código");
+            }
+        }
+    } catch (Exception e) {
+        System.out.println("Error al eliminar: " + e.getMessage());
+    }
+}
+```
+
+## Complex Multi-table JOIN
+
+Retrieve complete employee information across all three tables:
+
+```java
+private static void informacionCompletaJoins() {
+    String sql = "SELECT " +
+                "e.codigo_empleado, " +
+                "e.nombre_empleado, " +
+                "e.salario_base_empleado, " +
+                "e.fecha_ingreso_empleado, " +
+                "d.nombre_departamento, " +
+                "d.presupuesto_departamento, " +
+                "c.nombre_centro, " +
+                "c.ubicacion " +
+                "FROM t_empleados e " +
+                "JOIN t_departamentos d ON e.codigo_departamento = d.codigo_departamento " +
+                "JOIN t_centros c ON d.codigo_centro = c.codigo_centro " +
+                "ORDER BY e.codigo_empleado";
+
+    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+         PreparedStatement ps = conn.prepareStatement(sql);
+         ResultSet rs = ps.executeQuery()) {
+
+        System.out.println("\n--- INFORMACIÓN COMPLETA EMPLEADOS (CON JOINS) ---");
+        System.out.println("==================================================================================");
+        while (rs.next()) {
+            System.out.println("ID Empleado: " + rs.getInt("codigo_empleado"));
+            System.out.println("Nombre: " + rs.getString("nombre_empleado"));
+            System.out.println("Salario: " + rs.getDouble("salario_base_empleado"));
+            System.out.println("Fecha Ingreso: " + rs.getDate("fecha_ingreso_empleado"));
+            System.out.println("Departamento: " + rs.getString("nombre_departamento"));
+            System.out.println("Presupuesto Depto: " + rs.getDouble("presupuesto_departamento"));
+            System.out.println("Centro: " + rs.getString("nombre_centro"));
+            System.out.println("Ubicación: " + rs.getString("ubicacion"));
+            System.out.println("----------------------------------------------------------------------------------");
+        }
+    } catch (SQLException e) {
+        System.out.println("Error: " + e.getMessage());
+    }
+}
+```
+
+## Running the Application
+
+<Steps>
+
+### Compile with H2 Driver
+
+```bash
+javac -cp h2-*.jar DB_EnterpriseH2.java
+```
+
+### Execute the Application
+
+```bash
+java -cp .:h2-*.jar DB_EnterpriseH2
+```
+
+### Expected Output
+
+```
+Creando base de datos H2...
+Base de datos H2 en memoria creada exitosamente!
+
+=== GESTIÓN EMPRESA (H2) ===
+1. Ver empleados
+2. Agregar empleado
+3. Buscar empleados
+4. Ver departamentos
+5. Eliminar empleado
+6. Información completa con JOINs
+7. Salir
+Elige:
+```
+
+</Steps>
+
+## H2 Database Files
+
+H2 creates the following files:
+
+- `db_empresa_h2.mv.db` - Main database file (MVStore format)
+- `db_empresa_h2.trace.db` - Trace and debug log (optional)
+
+<Note>
+The `.mv.db` extension indicates H2 is using the MVStore storage engine, which is the default for H2 version 1.4+
+</Note>
+
+## Advantages of H2 Database
+
+- **Performance**: Generally faster than HSQLDB for most operations
+- **Multi-threaded**: Better support for concurrent access with AUTO_SERVER
+- **Compatibility modes**: Can emulate other databases (MySQL, PostgreSQL, etc.)
+- **Web console**: Built-in browser-based database console
+- **Small footprint**: Single JAR file, no external dependencies
+- **Active development**: Regularly updated with new features
+
+## H2 vs HSQLDB Comparison
+
+| Feature | H2 | HSQLDB |
+|---------|----|---------|
+| **Performance** | Generally faster | Good performance |
+| **File format** | MVStore (.mv.db) | Script-based (.script) |
+| **Concurrent access** | AUTO_SERVER mode | Single process |
+| **Web console** | Built-in | Separate tool |
+| **Memory usage** | Higher | Lower |
+| **Compatibility** | Multiple DB modes | Standard SQL |
+
+## Accessing H2 Web Console
+
+H2 includes a web-based database console. To use it:
+
+```bash
+java -cp h2-*.jar org.h2.tools.Server -web -webPort 8082
+```
+
+Then connect to `http://localhost:8082` with:
+- **JDBC URL**: `jdbc:h2:file:./db_empresa_h2`
+- **User**: `SA`
+- **Password**: (empty)
+
+## Next Steps
+
+- Compare with [HSQLDB Setup](/examples/hsqldb-setup)
+- Learn to [create a JAR deployment](/examples/jar-deployment)
+- Explore [advanced JDBC features](/core-concepts/advanced-jdbc)

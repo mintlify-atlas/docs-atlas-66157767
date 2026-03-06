@@ -1,0 +1,463 @@
+---
+title: 'JAR Creation and Deployment'
+description: 'Learn how to package and deploy the enterprise database application as an executable JAR file'
+---
+
+## Overview
+
+This guide demonstrates how to create a portable, executable JAR file for the HSQLDB enterprise application. The JAR packaging process enables easy distribution and deployment across different systems without requiring manual compilation.
+
+## What is CrearJar.java?
+
+`CrearJar.java` is a specialized utility that automates the entire JAR creation process, including:
+- Compiling the source code
+- Generating the manifest file
+- Creating configuration files
+- Packaging everything into an executable JAR
+- Cleaning up temporary files
+
+## JAR Creation Process
+
+### Complete Source Code
+
+```java
+import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+
+public class CrearJar {
+    public static void main(String[] args) throws IOException {
+        System.out.println("=== GENERADOR DE JAR PORTABLE ===");
+        
+        // Step 1: Compile the source file
+        System.out.println("1. Compilando DB_EnterpriseHSQLDB...");
+        ProcessBuilder compilar = new ProcessBuilder(
+            "javac", "-cp", "hsqldb-2.7.2.jar", "DB_EnterpriseHSQLDB.java"
+        );
+        Process procesoCompilar = compilar.start();
+        try {
+            procesoCompilar.waitFor();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        
+        // Step 2: Create manifest file
+        System.out.println("2. Creando MANIFEST.MF...");
+        String manifest = 
+            "Manifest-Version: 1.0\n" +
+            "Main-Class: DB_EnterpriseHSQLDB\n" +
+            "Class-Path: hsqldb-2.7.2.jar\n";
+        
+        Files.write(Paths.get("MANIFEST.MF"), manifest.getBytes());
+        
+        // Step 3: Create configuration file
+        System.out.println("3. Creando config.ini...");
+        String config = 
+            "#Configuración HSQLDB\n" +
+            "database.path=./db_empresa\n";
+        
+        if (!Files.exists(Paths.get("config.ini"))) {
+            Files.write(Paths.get("config.ini"), config.getBytes());
+        }
+        
+        // Step 4: Generate the JAR file
+        System.out.println("4. Generando JAR...");
+        ProcessBuilder crearJar = new ProcessBuilder(
+            "jar", "cfm", "EmpresaHSQLDB.jar", "MANIFEST.MF", 
+            "DB_EnterpriseHSQLDB.class", "config.ini"
+        );
+        Process procesoJar = crearJar.start();
+        try {
+            procesoJar.waitFor();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        
+        // Step 5: Clean up temporary files
+        System.out.println("5. Limpiando archivos temporales...");
+        Files.deleteIfExists(Paths.get("DB_EnterpriseHSQLDB.class"));
+        Files.deleteIfExists(Paths.get("MANIFEST.MF"));
+        
+        System.out.println("\n JAR CREADO EXITOSAMENTE");
+        System.out.println("\n ARCHIVOS GENERADOS:");
+        System.out.println("   - EmpresaHSQLDB.jar (tu aplicación)");
+        System.out.println("   - config.ini (configuración)");
+        System.out.println("\n PARA EJECUTAR:");
+        System.out.println("   java -jar EmpresaHSQLDB.jar");
+        System.out.println("\n PARA PORTAR A OTRA MÁQUINA, COPIA:");
+        System.out.println("   1. EmpresaHSQLDB.jar");
+        System.out.println("   2. config.ini");
+        System.out.println("   3. hsqldb-2.7.2.jar");
+    }
+}
+```
+
+## Step-by-Step Breakdown
+
+<Steps>
+
+### Step 1: Compile the Source Code
+
+The utility uses `ProcessBuilder` to invoke the Java compiler:
+
+```java
+ProcessBuilder compilar = new ProcessBuilder(
+    "javac", "-cp", "hsqldb-2.7.2.jar", "DB_EnterpriseHSQLDB.java"
+);
+Process procesoCompilar = compilar.start();
+procesoCompilar.waitFor();
+```
+
+<Note>
+- **`-cp hsqldb-2.7.2.jar`**: Adds the HSQLDB driver to the classpath
+- **`waitFor()`**: Waits for compilation to complete before proceeding
+</Note>
+
+### Step 2: Generate the Manifest File
+
+The manifest file defines the JAR's entry point and dependencies:
+
+```java
+String manifest = 
+    "Manifest-Version: 1.0\n" +
+    "Main-Class: DB_EnterpriseHSQLDB\n" +
+    "Class-Path: hsqldb-2.7.2.jar\n";
+
+Files.write(Paths.get("MANIFEST.MF"), manifest.getBytes());
+```
+
+#### Manifest Components:
+
+- **Manifest-Version**: Specifies the manifest specification version (always 1.0)
+- **Main-Class**: Defines the entry point class with the `main()` method
+- **Class-Path**: Lists external JAR dependencies (HSQLDB driver)
+
+<Tip>
+The `Class-Path` entry allows the application to find the HSQLDB driver when executed with `java -jar`
+</Tip>
+
+### Step 3: Create Configuration File
+
+Generates the `config.ini` file if it doesn't exist:
+
+```java
+String config = 
+    "#Configuración HSQLDB\n" +
+    "database.path=./db_empresa\n";
+
+if (!Files.exists(Paths.get("config.ini"))) {
+    Files.write(Paths.get("config.ini"), config.getBytes());
+}
+```
+
+This preserves existing configuration while ensuring a default exists.
+
+### Step 4: Build the JAR Archive
+
+Uses the `jar` command to package everything:
+
+```java
+ProcessBuilder crearJar = new ProcessBuilder(
+    "jar", "cfm", "EmpresaHSQLDB.jar", "MANIFEST.MF", 
+    "DB_EnterpriseHSQLDB.class", "config.ini"
+);
+Process procesoJar = crearJar.start();
+procesoJar.waitFor();
+```
+
+#### JAR Command Flags:
+
+- **`c`**: Create new archive
+- **`f`**: Specify archive file name
+- **`m`**: Include manifest file
+
+### Step 5: Clean Up Temporary Files
+
+Removes intermediate files that are no longer needed:
+
+```java
+Files.deleteIfExists(Paths.get("DB_EnterpriseHSQLDB.class"));
+Files.deleteIfExists(Paths.get("MANIFEST.MF"));
+```
+
+This keeps the directory clean while preserving the JAR and configuration files.
+
+</Steps>
+
+## Running the JAR Builder
+
+<Steps>
+
+### Prepare Your Environment
+
+Ensure you have the following files in your directory:
+
+```bash
+ls -l
+```
+
+Expected files:
+- `CrearJar.java`
+- `DB_EnterpriseHSQLDB.java`
+- `hsqldb-2.7.2.jar`
+
+### Compile the JAR Builder
+
+```bash
+javac CrearJar.java
+```
+
+### Execute the Builder
+
+```bash
+java CrearJar
+```
+
+### Expected Output
+
+```
+=== GENERADOR DE JAR PORTABLE ===
+1. Compilando DB_EnterpriseHSQLDB...
+2. Creando MANIFEST.MF...
+3. Creando config.ini...
+4. Generando JAR...
+5. Limpiando archivos temporales...
+
+ JAR CREADO EXITOSAMENTE
+
+ ARCHIVOS GENERADOS:
+   - EmpresaHSQLDB.jar (tu aplicación)
+   - config.ini (configuración)
+
+ PARA EJECUTAR:
+   java -jar EmpresaHSQLDB.jar
+
+ PARA PORTAR A OTRA MÁQUINA, COPIA:
+   1. EmpresaHSQLDB.jar
+   2. config.ini
+   3. hsqldb-2.7.2.jar
+```
+
+</Steps>
+
+## Deployment Package Contents
+
+After running the builder, you'll have the following files:
+
+<CodeGroup>
+
+```plaintext Directory Structure
+project/
+├── EmpresaHSQLDB.jar      # Your executable application
+├── config.ini              # Database configuration
+├── hsqldb-2.7.2.jar       # HSQLDB driver dependency
+├── CrearJar.java          # JAR builder source (optional)
+└── DB_EnterpriseHSQLDB.java  # Application source (optional)
+```
+
+```ini config.ini
+#Configuración HSQLDB
+database.path=./db_empresa
+```
+
+</CodeGroup>
+
+## Executing the Packaged Application
+
+### Simple Execution
+
+```bash
+java -jar EmpresaHSQLDB.jar
+```
+
+<Note>
+This works because:
+1. The manifest specifies `DB_EnterpriseHSQLDB` as the main class
+2. The `Class-Path` in the manifest points to `hsqldb-2.7.2.jar`
+3. The JAR contains the compiled class and configuration file
+</Note>
+
+### Verifying JAR Contents
+
+To inspect what's inside the JAR:
+
+```bash
+jar tf EmpresaHSQLDB.jar
+```
+
+Expected output:
+```
+META-INF/
+META-INF/MANIFEST.MF
+DB_EnterpriseHSQLDB.class
+config.ini
+```
+
+### Viewing the Manifest
+
+```bash
+jar xf EmpresaHSQLDB.jar META-INF/MANIFEST.MF
+cat META-INF/MANIFEST.MF
+```
+
+Output:
+```
+Manifest-Version: 1.0
+Main-Class: DB_EnterpriseHSQLDB
+Class-Path: hsqldb-2.7.2.jar
+```
+
+## Deploying to Another System
+
+<Steps>
+
+### Package the Distribution
+
+Create a directory with all required files:
+
+```bash
+mkdir empresa-app-dist
+cp EmpresaHSQLDB.jar empresa-app-dist/
+cp config.ini empresa-app-dist/
+cp hsqldb-2.7.2.jar empresa-app-dist/
+```
+
+### Create a Portable Archive
+
+```bash
+tar -czf empresa-app.tar.gz empresa-app-dist/
+```
+
+Or on Windows:
+```powershell
+Compress-Archive -Path empresa-app-dist -DestinationPath empresa-app.zip
+```
+
+### Deploy to Target System
+
+1. Transfer the archive to the target system
+2. Extract the archive:
+   ```bash
+   tar -xzf empresa-app.tar.gz
+   cd empresa-app-dist
+   ```
+
+3. Run the application:
+   ```bash
+   java -jar EmpresaHSQLDB.jar
+   ```
+
+</Steps>
+
+## Customizing the Configuration
+
+Before distributing, you can customize `config.ini` for different environments:
+
+<CodeGroup>
+
+```ini Development
+#Configuración HSQLDB
+database.path=./db_empresa_dev
+```
+
+```ini Production
+#Configuración HSQLDB
+database.path=/opt/empresa/data/db_empresa
+```
+
+```ini Windows
+#Configuración HSQLDB
+database.path=C:/Users/AppData/empresa/db_empresa
+```
+
+</CodeGroup>
+
+## Advanced JAR Options
+
+### Including Multiple Configuration Files
+
+Modify `CrearJar.java` to include additional files:
+
+```java
+ProcessBuilder crearJar = new ProcessBuilder(
+    "jar", "cfm", "EmpresaHSQLDB.jar", "MANIFEST.MF", 
+    "DB_EnterpriseHSQLDB.class", 
+    "config.ini",
+    "config.prod.ini",
+    "config.dev.ini"
+);
+```
+
+### Adding Version Information
+
+Enhance the manifest with version details:
+
+```java
+String manifest = 
+    "Manifest-Version: 1.0\n" +
+    "Main-Class: DB_EnterpriseHSQLDB\n" +
+    "Class-Path: hsqldb-2.7.2.jar\n" +
+    "Implementation-Title: Enterprise Database Manager\n" +
+    "Implementation-Version: 1.0.0\n" +
+    "Implementation-Vendor: Your Company\n";
+```
+
+### Creating a Launcher Script
+
+Create a shell script for easier execution:
+
+```bash
+#!/bin/bash
+# run.sh
+java -Xmx512m -jar EmpresaHSQLDB.jar
+```
+
+Make it executable:
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+## Troubleshooting
+
+### Class Not Found Error
+
+```
+Error: Could not find or load main class DB_EnterpriseHSQLDB
+```
+
+**Solution**: Verify the manifest's `Main-Class` entry matches your class name exactly.
+
+### HSQLDB Driver Not Found
+
+```
+java.lang.ClassNotFoundException: org.hsqldb.jdbc.JDBCDriver
+```
+
+**Solution**: Ensure `hsqldb-2.7.2.jar` is in the same directory as your application JAR.
+
+### Configuration File Not Found
+
+```
+java.io.FileNotFoundException: config.ini
+```
+
+**Solution**: The application looks for `config.ini` in the current working directory. Ensure you run the JAR from the correct location.
+
+## Best Practices
+
+<Tip>
+**Distribution Checklist**:
+1. Test the JAR on a clean system without development tools
+2. Include a README with system requirements and instructions
+3. Provide sample configuration files for different environments
+4. Version your JAR files (e.g., `EmpresaHSQLDB-v1.0.jar`)
+5. Include the HSQLDB license if distributing the driver
+6. Document any Java version requirements
+</Tip>
+
+## Next Steps
+
+- Review [HSQLDB Setup](/examples/hsqldb-setup) for database details
+- Explore [H2 Database alternative](/examples/h2-setup)
+- Learn about [JDBC best practices](/core-concepts/jdbc-fundamentals)

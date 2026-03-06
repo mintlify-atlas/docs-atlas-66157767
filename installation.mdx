@@ -1,0 +1,490 @@
+---
+title: "Installation"
+description: "Complete setup guide for Java, JDBC drivers, and database dependencies"
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed on your system:
+
+<CardGroup cols={2}>
+
+<Card title="Java Development Kit" icon="mug-hot">
+  JDK 8 or higher required for JDBC 4.0+ support
+</Card>
+
+<Card title="Text Editor or IDE" icon="code">
+  Any Java IDE (IntelliJ IDEA, Eclipse, VS Code) or text editor
+</Card>
+
+<Card title="Terminal Access" icon="terminal">
+  Command line interface for compilation and execution
+</Card>
+
+<Card title="Internet Connection" icon="wifi">
+  For downloading JDBC drivers and dependencies
+</Card>
+
+</CardGroup>
+
+## Step-by-step Installation
+
+<Steps>
+
+### Install Java Development Kit
+
+<Tabs>
+  <Tab title="Ubuntu/Debian">
+    ```bash
+    sudo apt update
+    sudo apt install openjdk-17-jdk
+    java -version
+    ```
+  </Tab>
+  
+  <Tab title="macOS">
+    Using Homebrew:
+    ```bash
+    brew install openjdk@17
+    echo 'export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"' >> ~/.zshrc
+    source ~/.zshrc
+    java -version
+    ```
+  </Tab>
+  
+  <Tab title="Windows">
+    1. Download JDK from [Oracle](https://www.oracle.com/java/technologies/downloads/) or [Adoptium](https://adoptium.net/)
+    2. Run the installer
+    3. Add Java to PATH environment variable
+    4. Verify installation:
+    ```cmd
+    java -version
+    javac -version
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  The tutorial code is compatible with Java 8 through Java 21. We recommend Java 17 (LTS) for the best experience.
+</Note>
+
+### Download Database Drivers
+
+The project supports two embedded database systems:
+
+#### H2 Database Driver
+
+```bash
+# Download H2 JDBC driver
+wget https://repo1.maven.org/maven2/com/h2database/h2/2.2.224/h2-2.2.224.jar
+
+# Or using curl
+curl -O https://repo1.maven.org/maven2/com/h2database/h2/2.2.224/h2-2.2.224.jar
+```
+
+**Manual download:** Visit [Maven Central - H2](https://mvnrepository.com/artifact/com.h2database/h2)
+
+#### HSQLDB Driver (Alternative)
+
+```bash
+# Download HSQLDB JDBC driver
+wget https://repo1.maven.org/maven2/org/hsqldb/hsqldb/2.7.2/hsqldb-2.7.2.jar
+
+# Or using curl
+curl -O https://repo1.maven.org/maven2/org/hsqldb/hsqldb/2.7.2/hsqldb-2.7.2.jar
+```
+
+**Manual download:** Visit [Maven Central - HSQLDB](https://mvnrepository.com/artifact/org.hsqldb/hsqldb)
+
+<Warning>
+  Store the JAR files in the same directory as your Java source files, or specify the full path in your classpath.
+</Warning>
+
+### Clone or Download the Project
+
+Get the source code:
+
+```bash
+git clone https://github.com/Alepern32/Trabajo_AD_Tarea2.git
+cd Trabajo_AD_Tarea2/Acceso_Datos_Tarea2
+```
+
+Or download the source files directly and place them in a working directory.
+
+### Verify the Setup
+
+Check that all required files are present:
+
+```bash
+ls -l
+```
+
+You should see:
+
+```
+ContadorBuggy.java
+ContadorEnBD.java
+ContadorEnBDUpdatable.java
+ContadorEnBDsoloUpdateSql.java
+ContadorSqlTransaccional.java
+ContadorSqlTransaccionalResUpdateable.java
+CrearJar.java
+DB_Enterprise.java
+DB_EnterpriseH2.java
+DB_EnterpriseHSQLDB.java
+config.ini
+EmpresaHSQLDB.jar
+h2-2.2.224.jar (if downloaded)
+```
+
+</Steps>
+
+## Configuration File
+
+The project includes a `config.ini` file for database configuration:
+
+```ini config.ini
+#Configuracion de la base de datos
+driverH2=h2
+driverHSQLDB=hsqldb
+nameDB=SA
+```
+
+This file is used by `DB_Enterprise.java` to determine which database driver to load:
+
+```java DB_Enterprise.java:22-48
+File f = new File("config.ini");
+Properties properties = new Properties();
+
+if (!f.exists()) {
+    // Create default config
+    properties.setProperty("driverH2", "h2");
+    properties.setProperty("driverHSQLDB", "hsqldb");
+    properties.setProperty("nameDB", "SA");
+    properties.store(new FileOutputStream("config.ini"), 
+                     "Configuracion de la base de datos");
+} else {
+    // Load existing config
+    properties.load(new FileInputStream(f));
+    driverHSQLDB = properties.getProperty("driverHSQLDB");
+    driverH2 = properties.getProperty("driverH2");
+    nameDB = properties.getProperty("nameDB");
+}
+```
+
+<Note>
+  If `config.ini` doesn't exist, the application will create it automatically with default values.
+</Note>
+
+## Compilation Instructions
+
+### Compile for H2 Database
+
+```bash
+# Compile the H2 version
+javac -cp ".:h2-2.2.224.jar" DB_EnterpriseH2.java
+
+# Run the application
+java -cp ".:h2-2.2.224.jar" DB_EnterpriseH2
+```
+
+### Compile for HSQLDB
+
+```bash
+# Compile the HSQLDB version
+javac -cp ".:hsqldb-2.7.2.jar" DB_EnterpriseHSQLDB.java
+
+# Run the application
+java -cp ".:hsqldb-2.7.2.jar" DB_EnterpriseHSQLDB
+```
+
+### Compile Counter Examples
+
+```bash
+# Simple counter (buggy version)
+javac ContadorBuggy.java
+java ContadorBuggy
+
+# Database counter with HSQLDB
+javac -cp ".:hsqldb-2.7.2.jar" ContadorEnBD.java
+java -cp ".:hsqldb-2.7.2.jar" ContadorEnBD
+
+# Transactional counter
+javac -cp ".:hsqldb-2.7.2.jar" ContadorSqlTransaccional.java
+java -cp ".:hsqldb-2.7.2.jar" ContadorSqlTransaccional
+```
+
+<Warning>
+  **Windows Users:** Replace colons (`:`) with semicolons (`;`) in classpath arguments:
+  
+  ```cmd
+  javac -cp ".;h2-2.2.224.jar" DB_EnterpriseH2.java
+  java -cp ".;h2-2.2.224.jar" DB_EnterpriseH2
+  ```
+</Warning>
+
+## IDE Setup
+
+### IntelliJ IDEA
+
+<Steps>
+
+1. Open IntelliJ IDEA and create a new Java project
+2. Copy all `.java` files to the `src` folder
+3. Add JDBC driver to project:
+   - **File → Project Structure → Libraries**
+   - Click **+** and select **Java**
+   - Browse to your `h2-2.2.224.jar` file
+   - Click **OK**
+4. Right-click `DB_EnterpriseH2.java` and select **Run**
+
+</Steps>
+
+### Eclipse
+
+<Steps>
+
+1. Create a new Java project
+2. Copy all `.java` files to the `src` folder
+3. Add JDBC driver to build path:
+   - Right-click project → **Build Path → Configure Build Path**
+   - Select **Libraries** tab
+   - Click **Add External JARs**
+   - Select your `h2-2.2.224.jar` file
+4. Right-click `DB_EnterpriseH2.java` → **Run As → Java Application**
+
+</Steps>
+
+### VS Code
+
+<Steps>
+
+1. Install the **Extension Pack for Java**
+2. Open the project folder in VS Code
+3. Create a `.vscode/settings.json` file:
+   ```json
+   {
+     "java.project.referencedLibraries": [
+       "lib/**/*.jar",
+       "h2-2.2.224.jar"
+     ]
+   }
+   ```
+4. Press **F5** to run with the Java debugger
+
+</Steps>
+
+## Maven/Gradle Setup (Optional)
+
+For larger projects, use a build tool:
+
+<Tabs>
+  <Tab title="Maven">
+    Create a `pom.xml`:
+    ```xml
+    <project>
+      <modelVersion>4.0.0</modelVersion>
+      <groupId>com.example</groupId>
+      <artifactId>database-tutorial</artifactId>
+      <version>1.0</version>
+      
+      <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+      </properties>
+      
+      <dependencies>
+        <dependency>
+          <groupId>com.h2database</groupId>
+          <artifactId>h2</artifactId>
+          <version>2.2.224</version>
+        </dependency>
+        <dependency>
+          <groupId>org.hsqldb</groupId>
+          <artifactId>hsqldb</artifactId>
+          <version>2.7.2</version>
+        </dependency>
+      </dependencies>
+    </project>
+    ```
+    
+    Then run:
+    ```bash
+    mvn clean compile
+    mvn exec:java -Dexec.mainClass="DB_EnterpriseH2"
+    ```
+  </Tab>
+  
+  <Tab title="Gradle">
+    Create a `build.gradle`:
+    ```gradle
+    plugins {
+        id 'java'
+        id 'application'
+    }
+    
+    group = 'com.example'
+    version = '1.0'
+    
+    repositories {
+        mavenCentral()
+    }
+    
+    dependencies {
+        implementation 'com.h2database:h2:2.2.224'
+        implementation 'org.hsqldb:hsqldb:2.7.2'
+    }
+    
+    application {
+        mainClass = 'DB_EnterpriseH2'
+    }
+    ```
+    
+    Then run:
+    ```bash
+    ./gradlew build
+    ./gradlew run
+    ```
+  </Tab>
+</Tabs>
+
+## Verify Installation
+
+Test that everything works:
+
+```bash
+# Test H2 database connection
+java -cp ".:h2-2.2.224.jar" DB_EnterpriseH2
+```
+
+You should see:
+
+```
+Archivo de BD anterior eliminado: db_empresa_h2.mv.db
+Creando base de datos H2...
+Base de datos H2 en memoria creada exitosamente!
+
+=== GESTIÓN EMPRESA (H2) ===
+1. Ver empleados
+2. Agregar empleado
+...
+```
+
+<Note>
+  If you see the menu, your installation is successful!
+</Note>
+
+## Database Files
+
+After running the applications, you'll see database files created:
+
+### H2 Database Files
+
+```
+db_empresa_h2.mv.db       # Main database file
+db_empresa_h2.trace.db    # Trace/log file (if errors occur)
+```
+
+### HSQLDB Files
+
+```
+db_empresa.script         # SQL script with data
+db_empresa.properties     # Database properties
+db_empresa.log           # Transaction log
+```
+
+<Warning>
+  The H2 example (`DB_EnterpriseH2.java`) deletes and recreates the database on startup. This is intentional for the tutorial to always start with fresh data.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+
+<Accordion title="java: command not found">
+  Java is not installed or not in your PATH.
+  
+  **Solution:**
+  - Verify Java installation: Download from [Oracle](https://www.oracle.com/java/technologies/downloads/) or [Adoptium](https://adoptium.net/)
+  - Add Java to PATH:
+    ```bash
+    # Linux/macOS - Add to ~/.bashrc or ~/.zshrc
+    export PATH="/path/to/jdk/bin:$PATH"
+    
+    # Windows - Use System Properties → Environment Variables
+    ```
+</Accordion>
+
+<Accordion title="ClassNotFoundException: org.h2.Driver">
+  The H2 driver JAR is not in the classpath.
+  
+  **Solution:**
+  - Ensure `h2-2.2.224.jar` is in the current directory
+  - Use the `-cp` flag correctly:
+    ```bash
+    java -cp ".:h2-2.2.224.jar" DB_EnterpriseH2
+    ```
+  - On Windows, use semicolon: `-cp ".;h2-2.2.224.jar"`
+</Accordion>
+
+<Accordion title="UnsupportedClassVersionError">
+  Your Java version is too old.
+  
+  **Solution:**
+  - Check your Java version: `java -version`
+  - Upgrade to Java 8 or higher
+  - If you compiled with a newer Java, recompile with an older target:
+    ```bash
+    javac -source 8 -target 8 -cp ".:h2-2.2.224.jar" DB_EnterpriseH2.java
+    ```
+</Accordion>
+
+<Accordion title="Database file locked error">
+  Another process is using the database.
+  
+  **Solution:**
+  - Close any other instances of the application
+  - Delete lock files:
+    ```bash
+    rm db_empresa_h2.lock.db
+    ```
+  - The `AUTO_SERVER=TRUE` parameter in the connection URL helps prevent this
+</Accordion>
+
+<Accordion title="Permission denied when creating database files">
+  Insufficient file system permissions.
+  
+  **Solution:**
+  - Run from a directory where you have write permissions
+  - Check directory permissions:
+    ```bash
+    ls -ld .
+    chmod u+w .
+    ```
+</Accordion>
+
+</AccordionGroup>
+
+## Next Steps
+
+Now that you have everything installed:
+
+<CardGroup cols={2}>
+
+<Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+  Run your first database application
+</Card>
+
+<Card title="Database Configuration" icon="gear" href="/components/database-configuration">
+  Learn about connection settings and config.ini
+</Card>
+
+<Card title="CRUD Operations" icon="database" href="/operations/crud-operations">
+  Explore create, read, update, and delete operations
+</Card>
+
+<Card title="Examples" icon="code" href="/examples/hsqldb-setup">
+  Try different database implementations
+</Card>
+
+</CardGroup>

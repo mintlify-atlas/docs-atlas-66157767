@@ -1,0 +1,238 @@
+---
+title: 'Database Configuration'
+description: 'Learn how to configure and connect to different database systems using config.ini and Java Properties'
+icon: 'gear'
+---
+
+## Overview
+
+The Database Access Tutorial uses a flexible configuration system based on `config.ini` files and Java Properties API to manage database connections. This approach allows switching between different database systems (HSQLDB and H2) without modifying the source code.
+
+## Configuration File Structure
+
+The `config.ini` file stores database connection parameters using a simple key-value format:
+
+```ini
+#Configuracion de la base de datos
+driverH2=h2
+driverHSQLDB=hsqldb
+nameDB=SA
+```
+
+<Note>
+The configuration file is automatically created if it doesn't exist, using default values for quick setup.
+</Note>
+
+## Basic Configuration Implementation
+
+The `DB_Enterprise.java` class demonstrates the fundamental configuration pattern:
+
+<Tabs>
+  <Tab title="Loading Configuration">
+    ```java DB_Enterprise.java:22-48
+    File f = new File("config.ini");
+    Properties properties = new Properties();
+
+    /* Si existe nuestro fichero config.ini cargaremos nuestro archivo y lo cargaremos en nuestra
+      base de datos */
+    if (!f.exists()) {
+        /* Si nuestro archivo no existe lo creamos 
+        añadiendo dos propeiedades para cada driver que usaremos */
+
+        properties.setProperty("driverH2", "h2");
+        properties.setProperty("driverHSQLDB", "hsqldb");
+
+        /* Añadimos otros 2 setProperty para poner 
+        en el nombre de la base de datos */
+        properties.setProperty("nameDB", "SA");
+
+        /* Almacenamos las propiedades a un archivo config.ini para usarlo despues para aplicar las configuraciones */
+        properties.store(new FileOutputStream("config.ini"), "Configuracion de la base de datos");
+        
+    } else {
+         
+         /* Almacenamos en variables las propiedades de nuestro archivo de configuracion externo */
+         properties.load(new FileInputStream(f));
+         driverHSQLDB = properties.getProperty("driverHSQLDB");
+         driverH2 = properties.getProperty("driverH2");
+         nameDB = properties.getProperty("nameDB");
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Building Connection URL">
+    ```java DB_Enterprise.java:50-58
+    /* Comparamos dependiendo de que gestor de base de datos se use sera diferente su url
+    para ser usada en la conexion */
+    
+    if (driverHSQLDB.equals("hsqldb")) {
+         url = "jdbc:hsqldb:file:/home/alumno/Escritorio/BBDD/db_empresa;shutdown=true;hsqldb.lock_file=false"; 
+
+    }else if (driverH2.equals("h2")) {
+         url = "jdbc:h2:file:./db_empresa_h2;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1"; 
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Establishing Connection">
+    ```java DB_Enterprise.java:59-65
+    try{
+      /* Creamos la conexion de nuestra BBDD con la url con el nombre de usuario y su password*/
+      Connection conn = DriverManager.getConnection(url, "SA", "");
+      System.out.println("La conexion se realizo correctamente " + url);
+    }catch(SQLException e){
+        e.printStackTrace();
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## HSQLDB Configuration
+
+The HSQLDB implementation in `DB_EnterpriseHSQLDB.java` uses a more sophisticated configuration approach with dynamic path resolution:
+
+```java DB_EnterpriseHSQLDB.java:26-42
+private static void cargarConfiguracion() throws IOException {
+    File configFile = new File("config.ini");
+    Properties properties = new Properties();
+    
+    if (!configFile.exists()) {
+        // Crear configuración por defecto
+        properties.setProperty("database.path", "./db_empresa");
+        properties.store(new FileOutputStream(configFile), "Configuración HSQLDB");
+        System.out.println("Archivo config.ini creado con ruta por defecto");
+    }
+    
+    properties.load(new FileInputStream(configFile));
+    String dbPath = properties.getProperty("database.path", "./db_empresa");
+    URL = "jdbc:hsqldb:file:" + dbPath + ";shutdown=true;hsqldb.lock_file=false";
+    
+    System.out.println("Conectando a: " + URL);
+}
+```
+
+<Accordion title="HSQLDB Connection Parameters">
+  - **shutdown=true**: Ensures proper database shutdown when the connection closes
+  - **hsqldb.lock_file=false**: Disables lock file creation (useful for development)
+  - **file:** prefix: Specifies file-based storage (vs. in-memory)
+</Accordion>
+
+## H2 Database Configuration
+
+The H2 implementation uses a simpler, hardcoded URL with specific H2 optimizations:
+
+```java DB_EnterpriseH2.java:7-10
+private static final String URL = "jdbc:h2:file:./db_empresa_h2;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1";
+private static final String USER = "SA";
+private static final String PASSWORD = "";
+```
+
+<Accordion title="H2 Connection Parameters">
+  - **AUTO_SERVER=TRUE**: Allows multiple connections to the same database
+  - **DB_CLOSE_DELAY=-1**: Keeps database open even when all connections close
+  - **file:** prefix: Uses file-based storage instead of in-memory
+</Accordion>
+
+## Driver Loading
+
+Both implementations explicitly load JDBC drivers before establishing connections:
+
+<CodeGroup>
+```java HSQLDB Driver
+Class.forName("org.hsqldb.jdbc.JDBCDriver");
+```
+
+```java H2 Driver
+Class.forName("org.h2.Driver");
+```
+</CodeGroup>
+
+<Note>
+Modern JDBC 4.0+ drivers support automatic loading, but explicit loading ensures compatibility with older Java versions.
+</Note>
+
+## Configuration Best Practices
+
+<Card title="Security" icon="shield">
+  Never hardcode credentials in source code. Use external configuration files with proper file permissions.
+</Card>
+
+<Card title="Portability" icon="laptop">
+  Use relative paths (e.g., `./db_empresa`) instead of absolute paths for better portability across environments.
+</Card>
+
+<Card title="Default Values" icon="wrench">
+  Always provide sensible defaults when configuration properties are missing using `getProperty(key, defaultValue)`.
+</Card>
+
+<Card title="Error Handling" icon="triangle-exclamation">
+  Wrap configuration loading in try-catch blocks to gracefully handle missing or malformed configuration files.
+</Card>
+
+## Comparison: HSQLDB vs H2
+
+| Feature | HSQLDB | H2 |
+|---------|--------|----|
+| **Configuration** | Dynamic from config.ini | Hardcoded constants |
+| **Lock File** | Disabled | Default enabled |
+| **Multi-connection** | Manual setup | AUTO_SERVER mode |
+| **Database Path** | Configurable | Fixed relative path |
+| **Shutdown** | Explicit shutdown=true | Close delay control |
+
+## Complete Configuration Example
+
+Here's a complete example showing initialization with configuration:
+
+```java
+import java.io.*;
+import java.sql.*;
+import java.util.Properties;
+
+public class DatabaseConfig {
+    private static String URL;
+    private static final String USER = "SA";
+    private static final String PASSWORD = "";
+    
+    public static void main(String[] args) {
+        try {
+            Class.forName("org.hsqldb.jdbc.JDBCDriver");
+            cargarConfiguracion();
+            inicializarBaseDatos();
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    private static void cargarConfiguracion() throws IOException {
+        File configFile = new File("config.ini");
+        Properties properties = new Properties();
+        
+        if (!configFile.exists()) {
+            properties.setProperty("database.path", "./db_empresa");
+            properties.store(new FileOutputStream(configFile), 
+                           "Database Configuration");
+        }
+        
+        properties.load(new FileInputStream(configFile));
+        String dbPath = properties.getProperty("database.path", "./db_empresa");
+        URL = "jdbc:hsqldb:file:" + dbPath + ";shutdown=true;hsqldb.lock_file=false";
+    }
+    
+    public static void inicializarBaseDatos() {
+        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
+            DatabaseMetaData meta = conn.getMetaData();
+            System.out.println("Connected to: " + meta.getDatabaseProductName());
+        } catch (SQLException e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
+}
+```
+
+## Next Steps
+
+Now that you understand database configuration, explore:
+
+- [Enterprise Management](/components/enterprise-management) - Menu-driven CRUD operations
+- [Counter Implementations](/components/counter-implementations) - Concurrency and transaction patterns
