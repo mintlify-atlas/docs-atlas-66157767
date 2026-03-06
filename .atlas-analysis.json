@@ -1,0 +1,74 @@
+{
+  "projectType": "general",
+  "projectName": "Database Access Tutorial",
+  "projectDescription": "Educational Java project demonstrating JDBC database operations with HSQLDB and H2, including transaction management and concurrency patterns.",
+  "theme": "linden",
+  "primaryColor": "#2563eb",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting Started",
+        "pages": [
+          "introduction",
+          "quickstart",
+          "installation"
+        ]
+      },
+      {
+        "group": "Core Components",
+        "pages": [
+          "components/database-configuration",
+          "components/enterprise-management",
+          "components/counter-implementations"
+        ]
+      },
+      {
+        "group": "Database Operations",
+        "pages": [
+          "operations/crud-operations",
+          "operations/transactions",
+          "operations/concurrency"
+        ]
+      },
+      {
+        "group": "Examples",
+        "pages": [
+          "examples/hsqldb-setup",
+          "examples/h2-setup",
+          "examples/jar-deployment"
+        ]
+      },
+      {
+        "group": "API Reference",
+        "pages": [
+          "api/db-enterprise",
+          "api/db-enterprise-hsqldb",
+          "api/db-enterprise-h2",
+          "api/contador-classes"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Enterprise employee management system with HSQLDB and H2 database support",
+    "Multiple counter implementations demonstrating transaction handling and concurrency patterns",
+    "CRUD operations for employees, departments, and centers with JOIN queries",
+    "External configuration management via config.ini files",
+    "JAR packaging utility for portable deployment",
+    "Comparison of atomic operations, updatable ResultSets, and transactional approaches"
+  ],
+  "publicApiSurface": [
+    "DB_Enterprise.main(String[])",
+    "DB_EnterpriseHSQLDB.main(String[])",
+    "DB_EnterpriseH2.main(String[])",
+    "ContadorEnBD.main(String[])",
+    "ContadorEnBDUpdatable.main(String[])",
+    "ContadorEnBDsoloUpdateSql.main(String[])",
+    "ContadorBuggy.main(String[])",
+    "ContadorSqlTransaccional.main(String[])",
+    "ContadorSqlTransaccionalResUpdateable.main(String[])",
+    "CrearJar.main(String[])"
+  ]
+}
